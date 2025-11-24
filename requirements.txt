@@ -1,0 +1,8 @@
+fastapi
+uvicorn
+h5py
+pandas
+numpy
+python-multipart
+scipy
+jinja2

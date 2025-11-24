@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Halo Catalogue Visualizer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Orbitron:wght@400;700&display=swap"
+        rel="stylesheet">
+
+    <!-- Libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <h1><span class="logo-icon">🌌</span> Halo Visualizer</h1>
+            <div class="upload-section">
+                <input type="file" id="fileInput" accept=".hdf5,.h5,.csv">
+                <label for="fileInput" class="upload-btn">Upload Catalogue</label>
+                <span id="fileName">No file chosen</span>
+            </div>
+        </header>
+
+        <main>
+            <aside class="sidebar">
+                <div class="panel">
+                    <h2>Controls</h2>
+                    <div class="control-group">
+                        <label>Point Size</label>
+                        <input type="range" id="pointSize" min="0.1" max="5" step="0.1" value="1">
+                    </div>
+                    <div class="control-group">
+                        <label>Opacity</label>
+                        <input type="range" id="opacity" min="0.1" max="1" step="0.1" value="0.8">
+                    </div>
+                    <div class="control-group">
+                        <label>Filter by Mass (log10 M<sub>☉</sub>)</label>
+                        <div class="range-inputs">
+                            <input type="number" id="minMass" placeholder="Min">
+                            <input type="number" id="maxMass" placeholder="Max">
+                        </div>
+                    </div>
+
+                    <div class="control-group">
+                        <label>Spatial Slicing (X) [Mpc]</label>
+                        <div class="range-inputs">
+                            <input type="number" id="xMin" placeholder="Min X">
+                            <input type="number" id="xMax" placeholder="Max X">
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>Spatial Slicing (Y) [Mpc]</label>
+                        <div class="range-inputs">
+                            <input type="number" id="yMin" placeholder="Min Y">
+                            <input type="number" id="yMax" placeholder="Max Y">
+                        </div>
+                    </div>
+                    <div class="control-group">
+                        <label>Spatial Slicing (Z) [Mpc]</label>
+                        <div class="range-inputs">
+                            <input type="number" id="zMin" placeholder="Min Z">
+                            <input type="number" id="zMax" placeholder="Max Z">
+                        </div>
+                    </div>
+
+                    <button id="applyFilter">Apply Filters & Slice</button>
+                </div>
+
+                <div class="panel">
+                    <h2>Quick Stats</h2>
+                    <div id="statsInfo">
+                        <p>Particles: <span id="countVal">-</span></p>
+                        <p>Total Mass: <span id="totalMassVal">-</span> M<sub>☉</sub></p>
+                    </div>
+                </div>
+            </aside>
+
+            <div class="content-area">
+                <div class="viewer-container" id="viewer3d">
+                    <!-- Three.js Canvas will be here -->
+                    <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+                        <div class="spinner"></div>
+                        <p>Processing Data...</p>
+                    </div>
+                    <div class="scroll-indicator">
+                        <span>Scroll for Analysis</span>
+                        <i>↓</i>
+                    </div>
+                </div>
+
+                <section class="dashboard">
+                    <div class="chart-card">
+                        <h3>Halo Mass Function</h3>
+                        <div id="hmfChart"></div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Cumulative HMF</h3>
+                        <div id="cumulativeHmfChart"></div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Radius Histogram</h3>
+                        <div id="radiusChart"></div>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Mass vs Radius</h3>
+                        <div id="scatterChart"></div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <script src="/static/js/viewer.js"></script>
+        <script src="/static/js/charts.js"></script>
+</body>
+
+</html>
