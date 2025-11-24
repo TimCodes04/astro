@@ -33,6 +33,41 @@ function init() {
     document.getElementById('opacity').addEventListener('input', updateOpacity);
     document.getElementById('applyFilter').addEventListener('click', applyFilters);
 
+    // Tab Switching
+    const tabBtns = document.querySelectorAll('.tab-btn');
+    const tabContents = document.querySelectorAll('.tab-content');
+
+    tabBtns.forEach(btn => {
+        btn.addEventListener('click', () => {
+            // Remove active class from all
+            tabBtns.forEach(b => b.classList.remove('active'));
+            tabContents.forEach(c => c.classList.remove('active'));
+
+            // Add active to clicked
+            btn.classList.add('active');
+            const tabId = btn.dataset.tab;
+            document.getElementById(`tab-${tabId}`).classList.add('active');
+
+            // Trigger resize for specific views
+            if (tabId === 'viewer') {
+                onWindowResize(); // Resize 3D viewer
+            } else if (tabId === 'dashboard') {
+                // Resize Plotly charts to fit new container dimensions
+                setTimeout(() => {
+                    const chartIds = ['hmfChart', 'cumulativeHmfChart', 'radiusChart', 'scatterChart'];
+                    chartIds.forEach(id => {
+                        const el = document.getElementById(id);
+                        if (el && el.data) {
+                            Plotly.Plots.resize(el);
+                        }
+                    });
+                }, 50); // Small delay to allow layout to settle
+            }
+        });
+    });
+
+    // Accordion logic removed to allow multiple sections to be open simultaneously
+
     animate();
 }
 
@@ -103,9 +138,13 @@ async function loadDataAndStats(fileId, params = '') {
             };
             // Override counts
             subsetStats.total_particles = data.mass.length;
-            updateStatsUI(subsetStats, data);
+            if (window.updateCharts) {
+                window.updateCharts(subsetStats, data);
+            }
         } else {
-            updateStatsUI(stats, data);
+            if (window.updateCharts) {
+                window.updateCharts(stats, data);
+            }
         }
 
     } catch (error) {
@@ -200,11 +239,4 @@ function applyFilters() {
         });
 }
 
-function updateStatsUI(stats, data) {
-    document.getElementById('countVal').textContent = stats.total_particles.toLocaleString();
-    document.getElementById('totalMassVal').textContent = stats.total_mass.toExponential(2);
 
-    if (window.updateCharts) {
-        window.updateCharts(stats, data);
-    }
-}

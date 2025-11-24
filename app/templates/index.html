@@ -32,89 +32,172 @@
 
         <main>
             <aside class="sidebar">
-                <div class="panel">
-                    <h2>Controls</h2>
-                    <div class="control-group">
-                        <label>Point Size</label>
-                        <input type="range" id="pointSize" min="0.1" max="5" step="0.1" value="1">
-                    </div>
-                    <div class="control-group">
-                        <label>Opacity</label>
-                        <input type="range" id="opacity" min="0.1" max="1" step="0.1" value="0.8">
-                    </div>
-                    <div class="control-group">
-                        <label>Filter by Mass (log10 M<sub>☉</sub>)</label>
-                        <div class="range-inputs">
-                            <input type="number" id="minMass" placeholder="Min">
-                            <input type="number" id="maxMass" placeholder="Max">
+                <details class="panel" open>
+                    <summary>
+                        <h2>Controls</h2>
+                    </summary>
+                    <div class="control-content">
+                        <div class="control-group">
+                            <label>Halo Size</label>
+                            <input type="range" id="pointSize" min="0.1" max="5" step="0.1" value="1">
+                        </div>
+                        <div class="control-group">
+                            <label>Opacity</label>
+                            <input type="range" id="opacity" min="0.1" max="1" step="0.1" value="0.8">
                         </div>
                     </div>
+                </details>
 
-                    <div class="control-group">
-                        <label>Spatial Slicing (X) [Mpc]</label>
-                        <div class="range-inputs">
-                            <input type="number" id="xMin" placeholder="Min X">
-                            <input type="number" id="xMax" placeholder="Max X">
+                <details class="panel" open>
+                    <summary>
+                        <h2>Filters & Slicing</h2>
+                    </summary>
+                    <div class="control-content">
+                        <div class="control-group">
+                            <label>Filter by Mass (log10 M<sub>☉</sub>)</label>
+                            <div class="range-inputs">
+                                <input type="number" id="minMass" placeholder="Min">
+                                <input type="number" id="maxMass" placeholder="Max">
+                            </div>
                         </div>
-                    </div>
-                    <div class="control-group">
-                        <label>Spatial Slicing (Y) [Mpc]</label>
-                        <div class="range-inputs">
-                            <input type="number" id="yMin" placeholder="Min Y">
-                            <input type="number" id="yMax" placeholder="Max Y">
-                        </div>
-                    </div>
-                    <div class="control-group">
-                        <label>Spatial Slicing (Z) [Mpc]</label>
-                        <div class="range-inputs">
-                            <input type="number" id="zMin" placeholder="Min Z">
-                            <input type="number" id="zMax" placeholder="Max Z">
-                        </div>
-                    </div>
 
-                    <button id="applyFilter">Apply Filters & Slice</button>
-                </div>
+                        <div class="control-group">
+                            <label>Spatial Slicing (X) [Mpc]</label>
+                            <div class="range-inputs">
+                                <input type="number" id="xMin" placeholder="Min X">
+                                <input type="number" id="xMax" placeholder="Max X">
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label>Spatial Slicing (Y) [Mpc]</label>
+                            <div class="range-inputs">
+                                <input type="number" id="yMin" placeholder="Min Y">
+                                <input type="number" id="yMax" placeholder="Max Y">
+                            </div>
+                        </div>
+                        <div class="control-group">
+                            <label>Spatial Slicing (Z) [Mpc]</label>
+                            <div class="range-inputs">
+                                <input type="number" id="zMin" placeholder="Min Z">
+                                <input type="number" id="zMax" placeholder="Max Z">
+                            </div>
+                        </div>
 
-                <div class="panel">
-                    <h2>Quick Stats</h2>
-                    <div id="statsInfo">
-                        <p>Particles: <span id="countVal">-</span></p>
-                        <p>Total Mass: <span id="totalMassVal">-</span> M<sub>☉</sub></p>
+                        <button id="applyFilter">Apply Filters & Slice</button>
                     </div>
-                </div>
+                </details>
+
+
+
+                <details class="panel">
+                    <summary>
+                        <h2>Subhalo Hierarchy</h2>
+                    </summary>
+                    <div class="control-content">
+                        <div class="control-group">
+                            <label>Show Subhalos</label>
+                            <input type="checkbox" id="showSubhalos" checked>
+                        </div>
+                        <div class="control-group">
+                            <label>Depth Level</label>
+                            <input type="range" min="1" max="5" value="1">
+                        </div>
+                    </div>
+                </details>
+
+                <details class="panel">
+                    <summary>
+                        <h2>Coordinate System</h2>
+                    </summary>
+                    <div class="control-content">
+                        <div class="control-group">
+                            <label>System</label>
+                            <select
+                                style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border);">
+                                <option>Cartesian (X, Y, Z)</option>
+                                <option>Spherical (r, θ, φ)</option>
+                                <option>Cylindrical (r, θ, z)</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label>Center Point</label>
+                            <div class="range-inputs">
+                                <input type="number" placeholder="0">
+                                <input type="number" placeholder="0">
+                                <input type="number" placeholder="0">
+                            </div>
+                        </div>
+                    </div>
+                </details>
+
+                <details class="panel">
+                    <summary>
+                        <h2>Other Settings</h2>
+                    </summary>
+                    <div class="control-content">
+                        <div class="control-group">
+                            <label>Color Map</label>
+                            <select
+                                style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border);">
+                                <option>Viridis</option>
+                                <option>Plasma</option>
+                                <option>Inferno</option>
+                                <option>Magma</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label>Background</label>
+                            <select
+                                style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border);">
+                                <option>Black</option>
+                                <option>White</option>
+                                <option>Starfield</option>
+                            </select>
+                        </div>
+                        <div class="control-group">
+                            <label>Performance Mode</label>
+                            <input type="checkbox">
+                        </div>
+                    </div>
+                </details>
             </aside>
 
             <div class="content-area">
-                <div class="viewer-container" id="viewer3d">
-                    <!-- Three.js Canvas will be here -->
-                    <div class="loading-overlay" id="loadingOverlay" style="display: none;">
-                        <div class="spinner"></div>
-                        <p>Processing Data...</p>
-                    </div>
-                    <div class="scroll-indicator">
-                        <span>Scroll for Analysis</span>
-                        <i>↓</i>
+                <div class="tab-bar">
+                    <button class="tab-btn active" data-tab="viewer">3D Viewer</button>
+                    <button class="tab-btn" data-tab="dashboard">Analysis Dashboard</button>
+                </div>
+
+                <div class="tab-content active" id="tab-viewer">
+                    <div class="viewer-container" id="viewer3d">
+                        <!-- Three.js Canvas will be here -->
+                        <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+                            <div class="spinner"></div>
+                            <p>Processing Data...</p>
+                        </div>
                     </div>
                 </div>
 
-                <section class="dashboard">
-                    <div class="chart-card">
-                        <h3>Halo Mass Function</h3>
-                        <div id="hmfChart"></div>
-                    </div>
-                    <div class="chart-card">
-                        <h3>Cumulative HMF</h3>
-                        <div id="cumulativeHmfChart"></div>
-                    </div>
-                    <div class="chart-card">
-                        <h3>Radius Histogram</h3>
-                        <div id="radiusChart"></div>
-                    </div>
-                    <div class="chart-card">
-                        <h3>Mass vs Radius</h3>
-                        <div id="scatterChart"></div>
-                    </div>
-                </section>
+                <div class="tab-content" id="tab-dashboard">
+                    <section class="dashboard">
+                        <div class="chart-card">
+                            <h3>Halo Mass Function</h3>
+                            <div id="hmfChart"></div>
+                        </div>
+                        <div class="chart-card">
+                            <h3>Cumulative HMF</h3>
+                            <div id="cumulativeHmfChart"></div>
+                        </div>
+                        <div class="chart-card">
+                            <h3>Radius Histogram</h3>
+                            <div id="radiusChart"></div>
+                        </div>
+                        <div class="chart-card">
+                            <h3>Mass vs Radius</h3>
+                            <div id="scatterChart"></div>
+                        </div>
+                    </section>
+                </div>
             </div>
         </main>
 
