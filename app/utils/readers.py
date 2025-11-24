@@ -3,6 +3,34 @@ import pandas as pd
 import numpy as np
 import os
 
+def read_h5_with_schema(file_path, schema_map):
+    """
+    Reads H5 data using a provided schema map.
+    """
+    data = {}
+    with h5py.File(file_path, 'r') as f:
+        # Required fields
+        data['mass'] = f[schema_map['mass']][:]
+        data['id'] = f[schema_map['id']][:]
+        
+        pos = f[schema_map['pos']][:]
+        data['x'] = pos[:, 0]
+        data['y'] = pos[:, 1]
+        data['z'] = pos[:, 2]
+        
+        # Optional fields
+        if schema_map.get('radius'):
+            data['radius'] = f[schema_map['radius']][:]
+        else:
+            data['radius'] = np.zeros_like(data['mass'])
+            
+        if schema_map.get('parent_id'):
+            data['parent_id'] = f[schema_map['parent_id']][:]
+        else:
+            data['parent_id'] = np.full_like(data['id'], -1)
+            
+    return data
+
 def parse_file(file_path: str):
     """
     Parses HDF5 or CSV file and returns a dictionary of arrays.
