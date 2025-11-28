@@ -1,5 +1,9 @@
 let scene, camera, renderer, points, controls;
 let currentFileId = null;
+let raycaster, mouse;
+let connectionLines;
+let globalData = null;
+let idMap = {};
 
 document.addEventListener('DOMContentLoaded', init);
 
@@ -26,8 +30,23 @@ function init() {
     const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
     scene.add(ambientLight);
 
+    // Raycaster & Interaction
+    raycaster = new THREE.Raycaster();
+    // Increase threshold for easier clicking on points
+    raycaster.params.Points.threshold = 1.0;
+    mouse = new THREE.Vector2();
+
+    // Connection Lines (initially hidden)
+    const lineGeo = new THREE.BufferGeometry();
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xaaaaaa, transparent: true, opacity: 0.8, linewidth: 2 });
+    connectionLines = new THREE.LineSegments(lineGeo, lineMat);
+    connectionLines.visible = false;
+    scene.add(connectionLines);
+
     // Event Listeners
     window.addEventListener('resize', onWindowResize, false);
+    // Use the renderer's domElement for click events to ensure coordinates are relative to canvas
+    renderer.domElement.addEventListener('click', onMouseClick, false);
     document.getElementById('fileInput').addEventListener('change', handleFileUpload);
     document.getElementById('pointSize').addEventListener('input', updatePointSize);
     document.getElementById('opacity').addEventListener('input', updateOpacity);
@@ -66,9 +85,209 @@ function init() {
         });
     });
 
-    // Accordion logic removed to allow multiple sections to be open simultaneously
-
     animate();
+}
+
+// ... (onMouseMove, onWindowResize, animate, handleFileUpload, showSchemaModal, loadDataAndStats, renderData remain unchanged) ...
+
+async function loadHierarchy(fileId, rootId = null, container = null) {
+    if (!container) {
+        container = document.getElementById('subhalo-hierarchy');
+        if (!container) return; // Guard if element missing
+        container.innerHTML = ''; // Clear loading/placeholder
+    }
+
+    try {
+        const url = rootId
+            ? `/hierarchy/${fileId}?root_id=${rootId}`
+            : `/hierarchy/${fileId}`;
+
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Failed to load hierarchy');
+        const nodes = await response.json();
+
+        if (nodes.length === 0) {
+            if (!rootId) container.innerHTML = '<div class="placeholder-text">No hierarchy data found.</div>';
+            return;
+        }
+
+        const list = document.createElement('div');
+        list.className = 'tree-list';
+
+        nodes.forEach(node => {
+            const nodeEl = document.createElement('div');
+            nodeEl.className = 'tree-node';
+            nodeEl.dataset.id = node.id;
+
+            const content = document.createElement('div');
+            content.className = 'tree-content';
+
+            const toggle = document.createElement('span');
+            toggle.className = 'tree-toggle';
+            toggle.textContent = node.has_children ? '▶' : '•';
+
+            const label = document.createElement('span');
+            label.className = 'tree-label';
+            label.textContent = `Halo ${node.id} (M: ${node.mass.toExponential(1)})`;
+
+            content.appendChild(toggle);
+            content.appendChild(label);
+            nodeEl.appendChild(content);
+
+            const childrenContainer = document.createElement('div');
+            childrenContainer.className = 'tree-children';
+            nodeEl.appendChild(childrenContainer);
+
+            // Interaction
+            content.onclick = (e) => {
+                e.stopPropagation();
+                highlightHalo(node.id);
+
+                // Toggle children if arrow clicked or if we want auto-expand
+                if (node.has_children) {
+                    if (childrenContainer.classList.contains('expanded')) {
+                        childrenContainer.classList.remove('expanded');
+                        toggle.textContent = '▶';
+                    } else {
+                        childrenContainer.classList.add('expanded');
+                        toggle.textContent = '▼';
+                        if (childrenContainer.children.length === 0) {
+                            loadHierarchy(fileId, node.id, childrenContainer);
+                        }
+                    }
+                }
+            };
+
+            list.appendChild(nodeEl);
+        });
+
+        container.appendChild(list);
+
+    } catch (error) {
+        console.error('Hierarchy error:', error);
+        if (!rootId && container) container.innerHTML = '<div class="error-text">Error loading hierarchy.</div>';
+    }
+}
+
+function highlightHalo(id, relatedIds = []) {
+    console.log('Highlighting Halo:', id, 'Related:', relatedIds);
+
+    // Clear all highlights
+    document.querySelectorAll('.tree-content').forEach(el => {
+        el.style.background = '';
+        el.style.border = '';
+    });
+
+    // Highlight Primary (Clicked)
+    const selectedNode = document.querySelector(`.tree-node[data-id="${id}"] > .tree-content`);
+    if (selectedNode) {
+        selectedNode.style.background = 'rgba(255, 255, 255, 0.3)';
+        selectedNode.style.border = '1px solid var(--accent)';
+        selectedNode.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+
+    // Highlight Related (Parent/Children)
+    relatedIds.forEach(relId => {
+        const relNode = document.querySelector(`.tree-node[data-id="${relId}"] > .tree-content`);
+        if (relNode) {
+            relNode.style.background = 'rgba(255, 255, 255, 0.1)';
+            relNode.style.border = '1px dashed #888';
+        }
+    });
+
+    // Trigger 3D connection view
+    if (idMap && idMap.hasOwnProperty(id)) {
+        showConnections(idMap[id]);
+    }
+}
+
+function onMouseClick(event) {
+    // Calculate mouse position in normalized device coordinates (-1 to +1) for both components
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+    mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+    raycaster.setFromCamera(mouse, camera);
+
+    // Intersect with points
+    if (points) {
+        const intersects = raycaster.intersectObject(points);
+
+        if (intersects.length > 0) {
+            // Get the closest intersection
+            const index = intersects[0].index;
+            const id = globalData.id[index];
+
+            // Find related IDs
+            const relatedIds = [];
+
+            // Parent
+            const parentId = globalData.parent_id ? globalData.parent_id[index] : -1;
+            if (parentId !== -1) relatedIds.push(parentId);
+
+            // Children
+            if (globalData.parent_id) {
+                for (let i = 0; i < globalData.parent_id.length; i++) {
+                    if (globalData.parent_id[i] === id) {
+                        relatedIds.push(globalData.id[i]);
+                    }
+                }
+            }
+
+            console.log("Clicked Halo ID:", id, "Related:", relatedIds);
+            highlightHalo(id, relatedIds);
+        } else {
+            // Clicked on empty space
+            clearConnections();
+            // Also clear tree selection
+            document.querySelectorAll('.tree-content').forEach(el => {
+                el.style.background = '';
+                el.style.border = '';
+            });
+        }
+    }
+}
+
+function showConnections(index) {
+    if (!globalData || !idMap) return;
+
+    const positions = [];
+    const currentId = globalData.id[index];
+    const parentId = globalData.parent_id ? globalData.parent_id[index] : -1;
+
+    const x = globalData.x[index];
+    const y = globalData.y[index];
+    const z = globalData.z[index];
+
+    // 1. Connection to Parent
+    if (parentId !== -1 && idMap.hasOwnProperty(parentId)) {
+        const pIdx = idMap[parentId];
+        positions.push(x, y, z);
+        positions.push(globalData.x[pIdx], globalData.y[pIdx], globalData.z[pIdx]);
+    }
+
+    // 2. Connection to Children (Scan all particles - optimization needed for large N)
+    // For < 100k particles, a simple loop is "okay" for a click event (not animation loop)
+    if (globalData.parent_id) {
+        for (let i = 0; i < globalData.parent_id.length; i++) {
+            if (globalData.parent_id[i] === currentId) {
+                positions.push(x, y, z);
+                positions.push(globalData.x[i], globalData.y[i], globalData.z[i]);
+            }
+        }
+    }
+
+    if (positions.length > 0) {
+        connectionLines.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+        connectionLines.geometry.computeBoundingSphere(); // Update bounding sphere for culling
+        connectionLines.visible = true;
+    } else {
+        connectionLines.visible = false;
+    }
+}
+
+function clearConnections() {
+    connectionLines.visible = false;
 }
 
 function onWindowResize() {
@@ -178,11 +397,11 @@ function showSchemaModal(datasets, proposedSchema) {
             });
             if (!ingestRes.ok) throw new Error('Ingestion failed');
 
-            // Now load data (Note: get_data currently doesn't use the schema, 
-            // so this might fail if the file structure is weird. 
-            // For this demo, we assume the user just wants to see the ingestion worked)
-            // Ideally we pass the schema to loadDataAndStats too.
+            // Now load data
             await loadDataAndStats(currentFileId);
+
+            // Load Hierarchy
+            await loadHierarchy(currentFileId);
         } catch (error) {
             console.error(error);
             alert('Ingestion error: ' + error.message);
@@ -209,6 +428,7 @@ async function loadDataAndStats(fileId, params = '') {
         const stats = await statsRes.json();
 
         renderData(data);
+        globalData = data; // Store for raycasting lookup
 
         // If we have filters, we might want to update stats to reflect subset
         // For now, we update the UI with the full stats or calculate subset stats if needed
@@ -239,6 +459,14 @@ async function loadDataAndStats(fileId, params = '') {
 
 function renderData(data) {
     if (points) scene.remove(points);
+
+    // Build ID Map for fast lookup
+    idMap = {};
+    if (data.id) {
+        for (let i = 0; i < data.id.length; i++) {
+            idMap[data.id[i]] = i;
+        }
+    }
 
     const geometry = new THREE.BufferGeometry();
     const vertices = [];

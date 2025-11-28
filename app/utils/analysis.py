@@ -135,3 +135,46 @@ def calculate_stats(data: dict):
                 }
 
     return stats_output
+
+def get_hierarchy_data(data, root_id=None):
+    """
+    Returns hierarchy data.
+    If root_id is None, returns top-level halos (parent_id == -1).
+    If root_id is provided, returns direct children of that halo.
+    """
+    ids = np.array(data['id'])
+    parents = np.array(data['parent_id'])
+    mass = np.array(data['mass'])
+    
+    # Ensure parents array exists
+    if parents is None or len(parents) == 0:
+        return []
+
+    if root_id is None:
+        # Find roots (parent_id == -1)
+        mask = (parents == -1)
+    else:
+        # Find children of root_id
+        mask = (parents == int(root_id))
+        
+    # Indices of matching halos
+    indices = np.where(mask)[0]
+    
+    result = []
+    for idx in indices:
+        halo_id = int(ids[idx])
+        # Check if this halo is a parent to anyone (has children)
+        # This is O(N) for each node, which is slow for large N.
+        # Optimization: Pre-check or use a set if N is large.
+        # For now, simple check: is halo_id in parents?
+        has_children = halo_id in parents
+        
+        result.append({
+            "id": halo_id,
+            "mass": float(mass[idx]),
+            "has_children": has_children
+        })
+        
+    # Sort by mass descending
+    result.sort(key=lambda x: x['mass'], reverse=True)
+    return result

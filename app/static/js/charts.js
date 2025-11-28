@@ -27,11 +27,11 @@ function updateCharts(stats, data) {
     }
 
     // 2. Cumulative HMF
-    if (stats.cumulative_mass_function) {
+    if (stats.cumulative_mass_function && stats.cumulative_mass_function.bin_centers && stats.cumulative_mass_function.counts) {
         const cmf = stats.cumulative_mass_function;
         Plotly.newPlot('cumulativeHmfChart', [{
             x: cmf.bin_centers.map(m => Math.log10(m)),
-            y: cmf.counts.map(c => Math.log10(c + 1)),
+            y: cmf.counts.map(c => Math.log10(c + 1)), // +1 to handle zeros safely
             type: 'scatter',
             mode: 'lines',
             line: { color: '#FF9800', width: 2 },
@@ -42,6 +42,9 @@ function updateCharts(stats, data) {
             xaxis: { ...commonLayout.xaxis, title: 'log10(Mass [M☉])' },
             yaxis: { ...commonLayout.yaxis, title: 'log10(N > M)' }
         }, { responsive: true, displayModeBar: false });
+    } else {
+        console.warn("Cumulative HMF data missing or incomplete. Keys:", stats.cumulative_mass_function ? Object.keys(stats.cumulative_mass_function) : "stats.cumulative_mass_function is undefined");
+        document.getElementById('cumulativeHmfChart').innerHTML = '<div class="placeholder-text">No Data</div>';
     }
 
     // 3. Radius Histogram
