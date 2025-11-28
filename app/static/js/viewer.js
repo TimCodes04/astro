@@ -66,9 +66,96 @@ function init() {
         });
     });
 
-    // Accordion logic removed to allow multiple sections to be open simultaneously
-
     animate();
+}
+
+// ... (onMouseMove, onWindowResize, animate, handleFileUpload, showSchemaModal, loadDataAndStats, renderData remain unchanged) ...
+
+async function loadHierarchy(fileId, rootId = null, container = null) {
+    if (!container) {
+        container = document.getElementById('subhalo-hierarchy');
+        if (!container) return; // Guard if element missing
+        container.innerHTML = ''; // Clear loading/placeholder
+    }
+
+    try {
+        const url = rootId
+            ? `/hierarchy/${fileId}?root_id=${rootId}`
+            : `/hierarchy/${fileId}`;
+
+        const response = await fetch(url);
+        if (!response.ok) throw new Error('Failed to load hierarchy');
+        const nodes = await response.json();
+
+        if (nodes.length === 0) {
+            if (!rootId) container.innerHTML = '<div class="placeholder-text">No hierarchy data found.</div>';
+            return;
+        }
+
+        const list = document.createElement('div');
+        list.className = 'tree-list';
+
+        nodes.forEach(node => {
+            const nodeEl = document.createElement('div');
+            nodeEl.className = 'tree-node';
+            nodeEl.dataset.id = node.id;
+
+            const content = document.createElement('div');
+            content.className = 'tree-content';
+
+            const toggle = document.createElement('span');
+            toggle.className = 'tree-toggle';
+            toggle.textContent = node.has_children ? '▶' : '•';
+
+            const label = document.createElement('span');
+            label.className = 'tree-label';
+            label.textContent = `Halo ${node.id} (M: ${node.mass.toExponential(1)})`;
+
+            content.appendChild(toggle);
+            content.appendChild(label);
+            nodeEl.appendChild(content);
+
+            const childrenContainer = document.createElement('div');
+            childrenContainer.className = 'tree-children';
+            nodeEl.appendChild(childrenContainer);
+
+            // Interaction
+            content.onclick = (e) => {
+                e.stopPropagation();
+                highlightHalo(node.id);
+
+                // Toggle children if arrow clicked or if we want auto-expand
+                if (node.has_children) {
+                    if (childrenContainer.classList.contains('expanded')) {
+                        childrenContainer.classList.remove('expanded');
+                        toggle.textContent = '▶';
+                    } else {
+                        childrenContainer.classList.add('expanded');
+                        toggle.textContent = '▼';
+                        if (childrenContainer.children.length === 0) {
+                            loadHierarchy(fileId, node.id, childrenContainer);
+                        }
+                    }
+                }
+            };
+
+            list.appendChild(nodeEl);
+        });
+
+        container.appendChild(list);
+
+    } catch (error) {
+        console.error('Hierarchy error:', error);
+        if (!rootId && container) container.innerHTML = '<div class="error-text">Error loading hierarchy.</div>';
+    }
+}
+
+function highlightHalo(id) {
+    console.log('Highlighting Halo:', id);
+    // Visual feedback in tree
+    document.querySelectorAll('.tree-content').forEach(el => el.style.background = '');
+    const selectedNode = document.querySelector(`.tree-node[data-id="${id}"] > .tree-content`);
+    if (selectedNode) selectedNode.style.background = 'rgba(255, 255, 255, 0.2)';
 }
 
 function onWindowResize() {
@@ -178,11 +265,11 @@ function showSchemaModal(datasets, proposedSchema) {
             });
             if (!ingestRes.ok) throw new Error('Ingestion failed');
 
-            // Now load data (Note: get_data currently doesn't use the schema, 
-            // so this might fail if the file structure is weird. 
-            // For this demo, we assume the user just wants to see the ingestion worked)
-            // Ideally we pass the schema to loadDataAndStats too.
+            // Now load data
             await loadDataAndStats(currentFileId);
+
+            // Load Hierarchy
+            await loadHierarchy(currentFileId);
         } catch (error) {
             console.error(error);
             alert('Ingestion error: ' + error.message);

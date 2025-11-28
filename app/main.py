@@ -122,6 +122,44 @@ async def ingest_data(file_id: str, schema: SchemaMap):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/hierarchy/{file_id}")
+async def get_hierarchy(file_id: str, root_id: Optional[str] = None):
+    # Validate file_id
+    try:
+        uuid.UUID(file_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid file ID")
+
+    # Find file
+    file_path = None
+    for ext in ['.hdf5', '.h5']: # Hierarchy only for H5
+        path = os.path.join(UPLOAD_DIR, f"{file_id}{ext}")
+        if os.path.exists(path):
+            file_path = path
+            break
+    
+    if not file_path:
+        return []
+
+    # touch_file(file_path) # Keep alive
+
+    try:
+        # Load schema from cache
+        schema = SCHEMA_CACHE.get(file_id)
+        if schema:
+            data = read_h5_with_schema(file_path, schema)
+        else:
+            # Fallback
+            data = parse_file(file_path)
+            if 'parent_id' not in data:
+                return []
+
+        from app.utils.analysis import get_hierarchy_data
+        nodes = get_hierarchy_data(data, root_id)
+        return nodes
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting hierarchy: {str(e)}")
+
 @app.get("/data/{file_id}")
 async def get_data(
     file_id: str,
