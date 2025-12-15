@@ -1,20 +1,17 @@
 import numpy as np
 from scipy import stats
 
-import numpy as np
-from scipy import stats
-
 def filter_data(data: dict, filters: dict):
     """
     Filters the data dictionary based on provided ranges.
     Returns a new dictionary with filtered arrays.
     """
-    # Create a boolean mask initialized to True
+
     count = len(data['x'])
     mask = np.ones(count, dtype=bool)
     
-    # Convert lists to numpy arrays for efficient masking if they aren't already
-    # (readers.py currently returns lists, so we convert here)
+    # Convert lists to numpy arrays 
+    # readers.py returns lists
     arrays = {k: np.array(v) for k, v in data.items()}
     
     # Apply filters
@@ -58,7 +55,7 @@ def calculate_stats(data: dict):
     x = np.array(data.get('x', []))
     y = np.array(data.get('y', []))
     z = np.array(data.get('z', []))
-    # Radius might not exist in all files, handle gracefully in logic below
+    # Radius might not exist in all files
     
     
     if len(mass) > 0:
@@ -76,21 +73,17 @@ def calculate_stats(data: dict):
         }
         
         # Scientific Halo Mass Function (dN/dlogM)
-        # We use log10 bins
         if stats_output['min_mass'] > 0:
             min_log_m = np.log10(stats_output['min_mass'])
             max_log_m = np.log10(stats_output['max_mass'])
             
-            # Create bins (e.g., 0.2 dex width or fixed number)
-            # Let's use fixed 25 bins for now
+            # Create bins (0.2 dex width or fixed number)
             bins = np.logspace(min_log_m, max_log_m, 25)
             
             counts, bin_edges = np.histogram(mass, bins=bins)
             
-            # Calculate dlogM for normalization if needed, but raw counts are often fine for quick viz
-            # For "scientific" HMF, we usually plot Number Density vs Mass. 
-            # Since we don't know volume explicitly (unless we estimate from bbox), we'll return counts.
-            # But we will return bin centers in log space.
+            # Calculate dlogM for normalization if needed
+            # For "scientific" HMF, plot Number Density vs Mass. 
             
             bin_centers = 10**((np.log10(bin_edges[:-1]) + np.log10(bin_edges[1:])) / 2)
             
@@ -101,7 +94,6 @@ def calculate_stats(data: dict):
             }
             
             # Cumulative Mass Function (N(>M))
-            # We sum from high mass to low mass
             cumulative_counts = np.cumsum(counts[::-1])[::-1]
             stats_output['cumulative_mass_function'] = {
                 'counts': cumulative_counts.tolist(),
@@ -121,8 +113,6 @@ def calculate_stats(data: dict):
         # Radius Histogram
         radius = np.array(data.get('radius', []))
         if len(radius) > 0:
-            # Linear bins for radius usually fine, or log if large dynamic range
-            # Let's do linear for now, 20 bins
             r_min, r_max = np.min(radius), np.max(radius)
             if r_max > r_min:
                 r_bins = np.linspace(r_min, r_max, 20)
@@ -164,8 +154,6 @@ def get_hierarchy_data(data, root_id=None):
     for idx in indices:
         halo_id = int(ids[idx])
         # Check if this halo is a parent to anyone (has children)
-        # This is O(N) for each node, which is slow for large N.
-        # Optimization: Pre-check or use a set if N is large.
         # For now, simple check: is halo_id in parents?
         has_children = halo_id in parents
         
