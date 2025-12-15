@@ -33,7 +33,7 @@ def detect_schema(datasets):
         'radius': None
     }
     
-    # Heuristic patterns (regex)
+    # Heuristic patterns
     patterns = {
         'mass': [r'mass', r'mvir', r'm200', r'weight'],
         'pos': [r'pos', r'coord', r'xyz', r'location'],
@@ -50,12 +50,12 @@ def detect_schema(datasets):
         shape = ds['shape']
         ndim = ds['ndim']
         
-        # Position must be (N, 3) or (3, N) - usually (N, 3)
+        
         if ndim == 2 and (shape[1] == 3 or shape[0] == 3):
             candidates['pos'].append(ds)
             continue
 
-        # Others are usually 1D (N,) or (N, 1)
+        
         if ndim == 1 or (ndim == 2 and (shape[1] == 1 or shape[0] == 1)):
             # Check keywords
             for field, regex_list in patterns.items():
@@ -66,11 +66,10 @@ def detect_schema(datasets):
                         candidates[field].append(ds)
                         break
     
-    # Select best candidates (simple first match for now, can be improved)
+    # Select best candidates, simple first match for now
     for field in schema.keys():
         if candidates[field]:
             # Prefer exact matches or shortest path
-            # For now, just take the first one found by regex
             schema[field] = candidates[field][0]['path']
 
     return schema, datasets
