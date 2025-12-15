@@ -99,8 +99,8 @@ async function loadHierarchy(fileId, rootId = null, container = null) {
 
     try {
         const url = rootId
-            ? `/hierarchy/${fileId}?root_id=${rootId}`
-            : `/hierarchy/${fileId}`;
+            ? `${API_BASE_URL}/hierarchy/${fileId}?root_id=${rootId}`
+            : `${API_BASE_URL}/hierarchy/${fileId}`;
 
         const response = await fetch(url);
         if (!response.ok) throw new Error('Failed to load hierarchy');
@@ -315,14 +315,14 @@ async function handleFileUpload(event) {
 
     try {
         // Upload
-        const uploadRes = await fetch('/upload', { method: 'POST', body: formData });
+        const uploadRes = await fetch(`${API_BASE_URL}/upload`, { method: 'POST', body: formData });
         if (!uploadRes.ok) throw new Error('Upload failed');
         const uploadData = await uploadRes.json();
         currentFileId = uploadData.file_id;
 
         // If H5, Scan Schema
         if (file.name.endsWith('.h5') || file.name.endsWith('.hdf5')) {
-            const scanRes = await fetch(`/scan/${currentFileId}`, { method: 'POST' });
+            const scanRes = await fetch(`${API_BASE_URL}/scan/${currentFileId}`, { method: 'POST' });
             if (!scanRes.ok) throw new Error('Scan failed');
             const scanData = await scanRes.json();
 
@@ -390,7 +390,7 @@ function showSchemaModal(datasets, proposedSchema) {
         document.getElementById('loadingOverlay').style.display = 'flex';
 
         try {
-            const ingestRes = await fetch(`/ingest/${currentFileId}`, {
+            const ingestRes = await fetch(`${API_BASE_URL}/ingest/${currentFileId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(schema)
@@ -418,8 +418,8 @@ function showSchemaModal(datasets, proposedSchema) {
 async function loadDataAndStats(fileId, params = '') {
     try {
         const [dataRes, statsRes] = await Promise.all([
-            fetch(`/data/${fileId}?${params}`),
-            fetch(`/stats/${fileId}`) // Note: Stats are currently for the full file
+            fetch(`${API_BASE_URL}/data/${fileId}?${params}`),
+            fetch(`${API_BASE_URL}/stats/${fileId}`) // Note: Stats are currently for the full file
         ]);
 
         if (!dataRes.ok || !statsRes.ok) throw new Error('Failed to fetch data');

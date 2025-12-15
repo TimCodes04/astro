@@ -1,17 +1,36 @@
-from fastapi import FastAPI, File, UploadFile, HTTPException
-from fastapi.staticfiles import StaticFiles
-from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
-from starlette.requests import Request
-import shutil
 import os
+import shutil
 import uuid
-from typing import List
+from typing import List, Optional, Dict, Any
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Query
+from fastapi.responses import JSONResponse, FileResponse, HTMLResponse
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
+from fastapi.requests import Request
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
 
-from app.utils.readers import parse_file
-from app.utils.analysis import calculate_stats, filter_data
+from app.utils.readers import parse_file, read_h5_with_schema
+from app.utils.analysis import calculate_stats, filter_data, get_hierarchy_data
+from app.utils.h5_scanner import scan_h5, detect_schema
 
-app = FastAPI(title="Halo Catalogue Visualizer")
+app = FastAPI()
+
+# CORS Configuration
+# Allow all origins for now to support Firebase Hosting easily.
+# For production security, restrict this to your specific Firebase domain.
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Configure directories
+# Use environment variable for flexibility (Cloud Run/GCS compatibility)
+UPLOAD_DIR = os.getenv("UPLOAD_DIR", "app/uploads")
+os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Mount static files
 app.mount("/static", StaticFiles(directory="app/static"), name="static")
@@ -19,7 +38,6 @@ app.mount("/static", StaticFiles(directory="app/static"), name="static")
 # Templates
 templates = Jinja2Templates(directory="app/templates")
 
-UPLOAD_DIR = "app/uploads"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 @app.get("/", response_class=HTMLResponse)
@@ -100,9 +118,10 @@ async def scan_file(file_id: str):
         raise HTTPException(status_code=404, detail="File not found")
     
     try:
+        # Scan H5
         datasets = scan_h5(file_path)
-        schema, _ = detect_schema(datasets)
-        return {"datasets": datasets, "schema": schema}
+        proposed_schema, _ = detect_schema(datasets)
+        return {"datasets": datasets, "schema": proposed_schema}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
