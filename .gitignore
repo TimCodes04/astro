@@ -1,1 +1,27 @@
+# Virtual Environment
 venv/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Mac OS
+.DS_Store
+
+# Data Files (Do not commit heavy H5 files)
+*.h5
+*.hdf5
+app/uploads/*
+!app/uploads/.gitkeep
+
+# Generated Demo Data
+demo_halo_catalog.h5
+
+# IDE Settings
+.vscode/
+.idea/
+
+# Agent Artifacts
+.gemini/
