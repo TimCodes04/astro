@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About Halo Visualizer</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&family=Orbitron:wght@400;700&display=swap"
+        rel="stylesheet">
+    <style>
+        .info-container {
+            max-width: 800px;
+            margin: 40px auto;
+            padding: 40px;
+            background: rgba(30, 41, 59, 0.9);
+            border-radius: 12px;
+            border: 1px solid var(--border);
+            backdrop-filter: blur(10px);
+            color: #f8fafc;
+            /* Slate-50 (White-ish) */
+        }
+
+        h1,
+        h2,
+        h3 {
+            color: #38bdf8;
+            /* Sky-400 */
+            margin-top: 30px;
+        }
+
+        p,
+        ul,
+        ol,
+        li {
+            line-height: 1.6;
+            color: #e2e8f0;
+            /* Slate-200 */
+        }
+
+        .back-btn {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #38bdf8;
+            text-decoration: none;
+            font-weight: 600;
+        }
+
+        .back-btn:hover {
+            color: #bae6fd;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="app-container">
+        <header>
+            <h1><span class="logo-icon">🌌</span> Halo Visualizer Info</h1>
+        </header>
+
+        <main style="display: block; overflow-y: auto;">
+            <div class="info-container">
+                <a href="/" class="back-btn">← Back to Visualizer</a>
+
+                <h1>About this Tool</h1>
+                <p>The **Halo Visualizer** is a specialized tool designed for astrophysicists and researchers to
+                    interactively explore dark matter halo catalogs from cosmological simulations.</p>
+
+                <h2>Key Features</h2>
+                <ul>
+                    <li><strong>3D Visualization</strong>: High-performance rendering of millions of particles using
+                        WebGL (Three.js).</li>
+                    <li><strong>Hierarchy Explorer</strong>: Investigate parent-child relationships in structure
+                        formation (Subhalos).</li>
+                    <li><strong>Scientific Analysis</strong>: Real-time calculation of Halo Mass Functions (HMF) and
+                        Mass-Radius relations.</li>
+                    <li><strong>Schema Agnostic</strong>: Intelligent scanning allows ingestion of various HDF5 formats
+                        without strict schema requirements.</li>
+                </ul>
+
+                <h2>How to Use</h2>
+                <ol>
+                    <li><strong>Upload</strong>: Drag & Drop your `.h5` or `.csv` catalog.</li>
+                    <li><strong>Map</strong>: Confirm the column mapping (Mass, Position, ID, Parent ID).</li>
+                    <li><strong>Explore</strong>: Use the mouse to rotate/zoom. Click on halos to see their properties
+                        and connections.</li>
+                </ol>
+
+                <h2>Demo Mode</h2>
+                <p>Don't have a dataset? Use the <strong>Load Sample Data</strong> button to generate a realistic NFW
+                    cluster simulation on the fly.</p>
+            </div>
+        </main>
+    </div>
+</body>
+
+</html>

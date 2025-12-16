@@ -160,6 +160,9 @@ def get_hierarchy_data(data, root_id=None):
         result.append({
             "id": halo_id,
             "mass": float(mass[idx]),
+            "x": float(data['x'][idx]),
+            "y": float(data['y'][idx]),
+            "z": float(data['z'][idx]),
             "has_children": has_children
         })
         

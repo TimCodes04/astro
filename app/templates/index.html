@@ -17,17 +17,26 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-    <script src="/static/js/viewer.js?v=5" defer></script>
-    <script src="/static/js/charts.js?v=5" defer></script>
+    <script src="/static/js/config.js"></script>
+    <script src="/static/js/viewer.js?v=7" defer></script>
+    <script src="/static/js/charts.js?v=7" defer></script>
 </head>
 
 <body>
     <div class="app-container">
         <header>
-            <h1><span class="logo-icon">🌌</span> Halo Visualizer</h1>
+            <div style="display:flex; align-items: center; gap: 20px;">
+                <h1><span class="logo-icon">🌌</span> Halo Visualizer</h1>
+                <a href="/info" class="upload-btn"
+                    style="background: white; border: 1px solid #ccc; color: black !important; text-decoration: none; padding: 6px 16px; font-weight: bold; text-transform: capitalize;">ℹ️
+                    Info</a>
+            </div>
             <div class="upload-section">
                 <input type="file" id="fileInput" accept=".hdf5,.h5,.csv">
                 <label for="fileInput" class="upload-btn">Upload Catalogue</label>
+                <button id="loadDemoBtn" class="upload-btn"
+                    style="background: var(--accent); border-color: var(--accent); margin-left: 10px;">Load Sample
+                    Data</button>
                 <span id="fileName">No file chosen</span>
             </div>
         </header>
@@ -41,7 +50,7 @@
                     <div class="control-content">
                         <div class="control-group">
                             <label>Halo Size</label>
-                            <input type="range" id="pointSize" min="0.1" max="5" step="0.1" value="1">
+                            <input type="range" id="pointSize" min="0.1" max="10" step="0.1" value="3">
                         </div>
                         <div class="control-group">
                             <label>Opacity</label>
@@ -108,19 +117,19 @@
                     <div class="control-content">
                         <div class="control-group">
                             <label>System</label>
-                            <select
+                            <select id="coordSystem"
                                 style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border);">
-                                <option>Cartesian (X, Y, Z)</option>
-                                <option>Spherical (r, θ, φ)</option>
-                                <option>Cylindrical (r, θ, z)</option>
+                                <option value="cartesian">Cartesian (X, Y, Z)</option>
+                                <option value="cylindrical">Cylindrical (ρ, φ, Z)</option>
+                                <option value="spherical">Spherical (r, θ, φ)</option>
                             </select>
                         </div>
                         <div class="control-group">
-                            <label>Center Point</label>
-                            <div class="range-inputs">
-                                <input type="number" placeholder="0">
-                                <input type="number" placeholder="0">
-                                <input type="number" placeholder="0">
+                            <label>Grid Origin</label>
+                            <div style="display: flex; align-items: center; gap: 8px;">
+                                <input type="checkbox" id="centerGrid" style="width: auto;">
+                                <label for="centerGrid" style="margin:0; font-weight: normal;">Center on Data
+                                    Cloud</label>
                             </div>
                         </div>
                     </div>
@@ -132,22 +141,21 @@
                     </summary>
                     <div class="control-content">
                         <div class="control-group">
-                            <label>Color Map</label>
-                            <select
+                            <label>Color By</label>
+                            <select id="colorBy"
                                 style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border);">
-                                <option>Viridis</option>
-                                <option>Plasma</option>
-                                <option>Inferno</option>
-                                <option>Magma</option>
+                                <option value="mass">Mass</option>
+                                <option value="radius">Radius</option>
                             </select>
                         </div>
                         <div class="control-group">
-                            <label>Background</label>
-                            <select
+                            <label>Color Map</label>
+                            <select id="colorMap"
                                 style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid var(--border);">
-                                <option>Black</option>
-                                <option>White</option>
-                                <option>Starfield</option>
+                                <option value="viridis">Viridis</option>
+                                <option value="plasma">Plasma</option>
+                                <option value="inferno">Inferno</option>
+                                <option value="magma">Magma</option>
                             </select>
                         </div>
                         <div class="control-group">
@@ -166,7 +174,10 @@
                 </div>
 
                 <div class="tab-content active" id="tab-viewer">
-                    <div class="viewer-container" id="viewer3d">
+                    <div id="viewer3d" class="viewer-container">
+                        <div id="haloInfoOverlay"
+                            style="position: absolute; top: 10px; right: 10px; background: rgba(0,0,0,0.7); color: #fff; padding: 10px; border-radius: 5px; font-family: monospace; display: none;">
+                        </div>
                         <!-- Three.js Canvas will be here -->
                         <div class="loading-overlay" id="loadingOverlay" style="display: none;">
                             <div class="spinner"></div>
@@ -244,8 +255,6 @@
             </div>
         </div>
 
-        <script src="/static/js/viewer.js"></script>
-        <script src="/static/js/charts.js"></script>
 </body>
 
 </html>

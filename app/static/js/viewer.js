@@ -1,9 +1,13 @@
 let scene, camera, renderer, points, controls;
 let currentFileId = null;
+let gridHelper = null;
+let currentCoordSystem = 'cartesian';
+let globalData = null;
+let dataCenter = new THREE.Vector3(0, 0, 0);
+let idMap = {};
+let selectedHaloId = null; // Track selected halo for reactive updates
 let raycaster, mouse;
 let connectionLines;
-let globalData = null;
-let idMap = {};
 
 document.addEventListener('DOMContentLoaded', init);
 
@@ -13,10 +17,19 @@ function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
 
-    camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 10000);
+    // Use a massive far plane initially to prevent clipping of astronomical usage
+    camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1e27);
     camera.position.z = 100;
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+
+    console.log("Init Viewer3D", {
+        width: container.clientWidth,
+        height: container.clientHeight,
+        offsetWidth: container.offsetWidth,
+        offsetHeight: container.offsetHeight
+    });
+
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
@@ -51,6 +64,13 @@ function init() {
     document.getElementById('pointSize').addEventListener('input', updatePointSize);
     document.getElementById('opacity').addEventListener('input', updateOpacity);
     document.getElementById('applyFilter').addEventListener('click', applyFilters);
+    document.getElementById('applyFilter').addEventListener('click', applyFilters);
+    document.getElementById('coordSystem').addEventListener('change', updateCoordinateSystem);
+    document.getElementById('centerGrid').addEventListener('change', updateCoordinateSystem);
+    document.getElementById('colorMap').addEventListener('change', updateColorMap);
+    document.getElementById('colorBy').addEventListener('change', updateColorMap);
+
+    updateCoordinateSystem(); // Initialize grid
 
     // Tab Switching
     const tabBtns = document.querySelectorAll('.tab-btn');
@@ -88,8 +108,6 @@ function init() {
     animate();
 }
 
-// ... (onMouseMove, onWindowResize, animate, handleFileUpload, showSchemaModal, loadDataAndStats, renderData remain unchanged) ...
-
 async function loadHierarchy(fileId, rootId = null, container = null) {
     if (!container) {
         container = document.getElementById('subhalo-hierarchy');
@@ -99,8 +117,8 @@ async function loadHierarchy(fileId, rootId = null, container = null) {
 
     try {
         const url = rootId
-            ? `/hierarchy/${fileId}?root_id=${rootId}`
-            : `/hierarchy/${fileId}`;
+            ? `${API_BASE_URL}/hierarchy/${fileId}?root_id=${rootId}`
+            : `${API_BASE_URL}/hierarchy/${fileId}`;
 
         const response = await fetch(url);
         if (!response.ok) throw new Error('Failed to load hierarchy');
@@ -130,8 +148,16 @@ async function loadHierarchy(fileId, rootId = null, container = null) {
             label.className = 'tree-label';
             label.textContent = `Halo ${node.id} (M: ${node.mass.toExponential(1)})`;
 
+            const coords = document.createElement('span');
+            coords.className = 'halo-coords';
+            // Initial coordinate calculation - Always visible
+            if (node.x !== undefined) {
+                coords.textContent = ` (${formatCoordinates(node.x, node.y, node.z, currentCoordSystem)})`;
+            }
+
             content.appendChild(toggle);
             content.appendChild(label);
+            content.appendChild(coords);
             nodeEl.appendChild(content);
 
             const childrenContainer = document.createElement('div');
@@ -195,6 +221,9 @@ function highlightHalo(id, relatedIds = []) {
         }
     });
 
+    // Update Display (Overlay + Tree Text)
+    updateHaloDisplay(id);
+
     // Trigger 3D connection view
     if (idMap && idMap.hasOwnProperty(id)) {
         showConnections(idMap[id]);
@@ -235,17 +264,158 @@ function onMouseClick(event) {
             }
 
             console.log("Clicked Halo ID:", id, "Related:", relatedIds);
+            // Store selected ID
+            selectedHaloId = id;
             highlightHalo(id, relatedIds);
         } else {
             // Clicked on empty space
             clearConnections();
+
+            // Clear selection state
+            selectedHaloId = null;
+
             // Also clear tree selection
             document.querySelectorAll('.tree-content').forEach(el => {
                 el.style.background = '';
                 el.style.border = '';
             });
+            document.getElementById('haloInfoOverlay').style.display = 'none';
         }
     }
+}
+
+function updateCoordinateSystem() {
+    currentCoordSystem = document.getElementById('coordSystem').value;
+
+    // Update Grid
+    if (gridHelper) scene.remove(gridHelper);
+
+    // Choose size based on current data or default
+    const size = 100;
+    const divisions = 20;
+    const color = 0x888888;
+
+    if (currentCoordSystem === 'cartesian') {
+        gridHelper = new THREE.GridHelper(size, divisions, color, 0x444444);
+    } else if (currentCoordSystem === 'cylindrical') {
+        gridHelper = new THREE.PolarGridHelper(size / 2, 16, 8, 64, color, color);
+    } else if (currentCoordSystem === 'spherical') {
+        // Simple approximation: multiple polar grids or a wireframe sphere
+        gridHelper = new THREE.Group();
+        const g1 = new THREE.PolarGridHelper(size / 2, 16, 8, 64, color, color);
+        const g2 = new THREE.PolarGridHelper(size / 2, 16, 8, 64, color, color);
+        g2.rotation.x = Math.PI / 2;
+        gridHelper.add(g1);
+        gridHelper.add(g2);
+    }
+
+    const useRelative = document.getElementById('centerGrid').checked;
+
+    if (useRelative) {
+        gridHelper.position.copy(dataCenter);
+        showNotification("Switched to Relative Coordinates (Centered)");
+    } else {
+        gridHelper.position.set(0, 0, 0);
+        showNotification("Switched to Absolute Coordinates (World Origin)");
+    }
+
+    scene.add(gridHelper);
+
+    // Reactive Update: Update ALL visible hierarchy nodes
+    const treeNodes = document.querySelectorAll('.tree-node');
+    treeNodes.forEach(node => {
+        const id = parseInt(node.dataset.id);
+        const idx = idMap[id];
+        if (idx !== undefined && globalData) {
+            let x = globalData.x[idx];
+            let y = globalData.y[idx];
+            let z = globalData.z[idx];
+
+            if (useRelative) {
+                x -= dataCenter.x;
+                y -= dataCenter.y;
+                z -= dataCenter.z;
+            }
+
+            const text = formatCoordinates(x, y, z, currentCoordSystem);
+
+            const coordSpan = node.querySelector('.halo-coords');
+            if (coordSpan) {
+                coordSpan.textContent = ` (${text})`;
+            }
+        }
+    });
+
+    // Also update overlay if something is selected
+    if (selectedHaloId !== null) {
+        updateHaloDisplay(selectedHaloId);
+    }
+}
+
+function showNotification(message) {
+    const overlay = document.getElementById('haloInfoOverlay');
+    const originalDisplay = overlay.style.display;
+    const originalContent = overlay.innerHTML;
+
+    // Use a separate notification element or hijack the overlay temporarily
+    // Ideally we'd have a toast, but keeping it simple:
+    const notification = document.createElement('div');
+    notification.style.position = 'absolute';
+    notification.style.top = '60px';
+    notification.style.right = '10px';
+    notification.style.background = 'rgba(33, 150, 243, 0.9)';
+    notification.style.color = 'white';
+    notification.style.padding = '10px 20px';
+    notification.style.borderRadius = '4px';
+    notification.style.fontFamily = 'sans-serif';
+    notification.style.transition = 'opacity 0.5s';
+    notification.textContent = message;
+
+    document.getElementById('viewer3d').appendChild(notification);
+
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => notification.remove(), 500);
+    }, 2000);
+}
+
+function updateHaloDisplay(id) {
+    const idx = idMap[id];
+    if (globalData && idx !== undefined) {
+        let x = globalData.x[idx];
+        let y = globalData.y[idx];
+        let z = globalData.z[idx];
+
+        // Check relative mode
+        if (document.getElementById('centerGrid').checked) {
+            x -= dataCenter.x;
+            y -= dataCenter.y;
+            z -= dataCenter.z;
+        }
+
+        const text = formatCoordinates(x, y, z, currentCoordSystem);
+
+        // Update Overlay
+        const overlay = document.getElementById('haloInfoOverlay');
+        overlay.style.display = 'block';
+        overlay.innerHTML = `<strong>Halo ${id}</strong><br>${text}`;
+    }
+}
+
+function formatCoordinates(x, y, z, system) {
+    if (system === 'cartesian') {
+        return `X: ${x.toFixed(2)}, Y: ${y.toFixed(2)}, Z: ${z.toFixed(2)}`;
+    } else if (system === 'cylindrical') {
+        const rho = Math.sqrt(x * x + y * y);
+        const phi = Math.atan2(y, x);
+        return `ρ: ${rho.toFixed(2)}, φ: ${phi.toFixed(2)} rad, Z: ${z.toFixed(2)}`;
+    } else if (system === 'spherical') {
+        const r = Math.sqrt(x * x + y * y + z * z);
+        const theta = Math.acos(z / r);
+        const phi = Math.atan2(y, x);
+        return `r: ${r.toFixed(2)}, θ: ${theta.toFixed(2)}, φ: ${phi.toFixed(2)}`;
+    }
+    return '';
 }
 
 function showConnections(index) {
@@ -266,8 +436,7 @@ function showConnections(index) {
         positions.push(globalData.x[pIdx], globalData.y[pIdx], globalData.z[pIdx]);
     }
 
-    // 2. Connection to Children (Scan all particles - optimization needed for large N)
-    // For < 100k particles, a simple loop is "okay" for a click event (not animation loop)
+    // 2. Connection to Children
     if (globalData.parent_id) {
         for (let i = 0; i < globalData.parent_id.length; i++) {
             if (globalData.parent_id[i] === currentId) {
@@ -279,7 +448,7 @@ function showConnections(index) {
 
     if (positions.length > 0) {
         connectionLines.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        connectionLines.geometry.computeBoundingSphere(); // Update bounding sphere for culling
+        connectionLines.geometry.computeBoundingSphere();
         connectionLines.visible = true;
     } else {
         connectionLines.visible = false;
@@ -299,7 +468,7 @@ function onWindowResize() {
 
 function animate() {
     requestAnimationFrame(animate);
-    controls.update(); // Required for damping
+    controls.update();
     renderer.render(scene, camera);
 }
 
@@ -314,15 +483,14 @@ async function handleFileUpload(event) {
     formData.append('file', file);
 
     try {
-        // Upload
-        const uploadRes = await fetch('/upload', { method: 'POST', body: formData });
+        const uploadRes = await fetch(`${API_BASE_URL}/upload`, { method: 'POST', body: formData });
         if (!uploadRes.ok) throw new Error('Upload failed');
         const uploadData = await uploadRes.json();
         currentFileId = uploadData.file_id;
 
         // If H5, Scan Schema
         if (file.name.endsWith('.h5') || file.name.endsWith('.hdf5')) {
-            const scanRes = await fetch(`/scan/${currentFileId}`, { method: 'POST' });
+            const scanRes = await fetch(`${API_BASE_URL}/scan/${currentFileId}`, { method: 'POST' });
             if (!scanRes.ok) throw new Error('Scan failed');
             const scanData = await scanRes.json();
 
@@ -390,7 +558,7 @@ function showSchemaModal(datasets, proposedSchema) {
         document.getElementById('loadingOverlay').style.display = 'flex';
 
         try {
-            const ingestRes = await fetch(`/ingest/${currentFileId}`, {
+            const ingestRes = await fetch(`${API_BASE_URL}/ingest/${currentFileId}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(schema)
@@ -418,8 +586,8 @@ function showSchemaModal(datasets, proposedSchema) {
 async function loadDataAndStats(fileId, params = '') {
     try {
         const [dataRes, statsRes] = await Promise.all([
-            fetch(`/data/${fileId}?${params}`),
-            fetch(`/stats/${fileId}`) // Note: Stats are currently for the full file
+            fetch(`${API_BASE_URL}/data/${fileId}?${params}`),
+            fetch(`${API_BASE_URL}/stats/${fileId}`)
         ]);
 
         if (!dataRes.ok || !statsRes.ok) throw new Error('Failed to fetch data');
@@ -429,18 +597,19 @@ async function loadDataAndStats(fileId, params = '') {
 
         renderData(data);
         globalData = data; // Store for raycasting lookup
+        console.log("Global Data Loaded:", {
+            hasMass: !!globalData.mass,
+            massLen: globalData.mass ? globalData.mass.length : 0,
+            hasRadius: !!globalData.radius,
+            radiusLen: globalData.radius ? globalData.radius.length : 0
+        });
 
-        // If we have filters, we might want to update stats to reflect subset
-        // For now, we update the UI with the full stats or calculate subset stats if needed
         if (params) {
             const subsetStats = {
                 total_particles: data.mass.length,
                 total_mass: data.mass.reduce((a, b) => a + b, 0),
-                // Pass through other stats or leave them as full file stats
-                // Ideally backend should handle filtered stats
                 ...stats
             };
-            // Override counts
             subsetStats.total_particles = data.mass.length;
             if (window.updateCharts) {
                 window.updateCharts(subsetStats, data);
@@ -473,12 +642,25 @@ function renderData(data) {
     const colors = [];
 
     const colorScale = new THREE.Color();
-    const minMass = Math.min(...data.mass);
-    const maxMass = Math.max(...data.mass);
+    // Safe Min/Max calculation for large arrays to avoid stack overflow
+    let minMass = Infinity;
+    let maxMass = -Infinity;
+    if (data.mass && data.mass.length > 0) {
+        for (let i = 0; i < data.mass.length; i++) {
+            if (data.mass[i] < minMass) minMass = data.mass[i];
+            if (data.mass[i] > maxMass) maxMass = data.mass[i];
+        }
+    } else {
+        minMass = 0;
+        maxMass = 1;
+    }
     const massRange = maxMass - minMass || 1;
 
+    console.log(`RenderData: Processing ${data.x.length} points. Mass Range: ${minMass} - ${maxMass}`);
+
     for (let i = 0; i < data.x.length; i++) {
-        vertices.push(data.x[i], data.y[i], data.z[i]);
+        // Explicitly cast to Number to avoid string/type issues
+        vertices.push(Number(data.x[i]), Number(data.y[i]), Number(data.z[i]));
 
         // Color by mass (heatmap: blue -> red)
         const normalizedMass = (data.mass[i] - minMass) / massRange;
@@ -489,7 +671,27 @@ function renderData(data) {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
-    const sprite = new THREE.TextureLoader().load('https://threejs.org/examples/textures/sprites/disc.png');
+    // Generate a simple circular sprite to avoid external dependencies/CORS issues
+    const getSprite = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 32;
+        canvas.height = 32;
+        const context = canvas.getContext('2d');
+        context.shadowBlur = 0;
+        context.shadowColor = 'none';
+
+        const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
+        gradient.addColorStop(0, 'rgba(255,255,255,1)');
+        gradient.addColorStop(0.2, 'rgba(255,255,255,0.8)');
+        gradient.addColorStop(0.5, 'rgba(255,255,255,0.2)');
+        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, 32, 32);
+
+        const text = new THREE.CanvasTexture(canvas);
+        return text;
+    };
 
     const material = new THREE.PointsMaterial({
         size: parseFloat(document.getElementById('pointSize').value),
@@ -497,25 +699,53 @@ function renderData(data) {
         transparent: true,
         opacity: parseFloat(document.getElementById('opacity').value),
         sizeAttenuation: true,
-        map: sprite,
-        alphaTest: 0.5
+        map: getSprite(),
+        depthWrite: false, // Fix transparency overlapping issue
+        blending: THREE.AdditiveBlending // Better for space particles
     });
 
     points = new THREE.Points(geometry, material);
+    // Disable frustrating culling issues if bounding sphere is wonky
+    points.frustumCulled = false;
     scene.add(points);
 
-    // Center camera
+    // Center camera and adjust frustum to fit data
     geometry.computeBoundingSphere();
     const center = geometry.boundingSphere.center;
-    const radius = geometry.boundingSphere.radius;
+    dataCenter.copy(center); // Store for grid centering
+    const radius = geometry.boundingSphere.radius || 100; // Default if 0
 
-    controls.target.copy(center);
-    controls.update();
+    console.log("RenderData Layout:", { center, radius });
 
-    camera.position.copy(center);
-    camera.position.z += radius * 2;
-    camera.lookAt(center);
+    if (!isNaN(center.x)) {
+        controls.target.copy(center);
+
+        // Robust Camera Fitting
+        const fov = camera.fov * (Math.PI / 180);
+        let distance = Math.abs(radius / Math.sin(fov / 2));
+        distance *= 1.5; // Add some padding
+
+        // Dynamically adjust planes to prevent clipping z-fighting
+        camera.near = radius / 100000;
+        camera.far = radius * 100;
+        if (camera.near < 0.001) camera.near = 0.001;
+
+        camera.updateProjectionMatrix();
+
+        camera.position.copy(center);
+        camera.position.z += distance;
+        camera.lookAt(center);
+
+        controls.update();
+
+        // Auto-scale point size if it seems too small/large compared to scene
+        // Just a heuristic trigger if user hasn't messed with it
+        const optimalSize = radius / 1000;
+        // Don't override user input aggressively, but maybe log it or set if default
+        console.log("Optimal point size approx:", optimalSize);
+    }
 }
+
 
 function updatePointSize(e) {
     if (points) points.material.size = parseFloat(e.target.value);
@@ -523,6 +753,134 @@ function updatePointSize(e) {
 
 function updateOpacity(e) {
     if (points) points.material.opacity = parseFloat(e.target.value);
+}
+
+// --- Color Mapping Logic ---
+const COLOR_MAPS = {
+    viridis: [
+        [0.0, 0.267, 0.005, 0.329],
+        [0.2, 0.282, 0.224, 0.490],
+        [0.4, 0.208, 0.392, 0.529],
+        [0.6, 0.129, 0.533, 0.553],
+        [0.8, 0.255, 0.714, 0.459],
+        [1.0, 0.992, 0.906, 0.145]
+    ],
+    plasma: [
+        [0.0, 0.051, 0.027, 0.529],
+        [0.2, 0.325, 0.008, 0.584],
+        [0.4, 0.569, 0.157, 0.498],
+        [0.6, 0.812, 0.380, 0.306],
+        [0.8, 0.949, 0.647, 0.149],
+        [1.0, 0.941, 0.976, 0.129]
+    ],
+    inferno: [
+        [0.0, 0.001, 0.003, 0.024],
+        [0.2, 0.173, 0.043, 0.259],
+        [0.4, 0.431, 0.118, 0.345],
+        [0.6, 0.749, 0.349, 0.169],
+        [0.8, 0.933, 0.659, 0.192],
+        [1.0, 0.988, 0.992, 0.647]
+    ],
+    magma: [
+        [0.0, 0.001, 0.001, 0.020],
+        [0.2, 0.137, 0.063, 0.298],
+        [0.4, 0.369, 0.067, 0.400],
+        [0.6, 0.706, 0.176, 0.325],
+        [0.8, 0.984, 0.494, 0.435],
+        [1.0, 0.988, 0.992, 0.749]
+    ]
+};
+
+function lerpColor(map, t) {
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+
+    // Find segment
+    // Map has 6 points (0, 0.2, 0.4 ... 1.0)
+    // Segment width is 0.2
+    let seg = t * (map.length - 1);
+    let idx = Math.floor(seg);
+    let frac = seg - idx;
+
+    if (idx >= map.length - 1) return map[map.length - 1].slice(1);
+
+    const c1 = map[idx];
+    const c2 = map[idx + 1];
+
+    return [
+        c1[1] + (c2[1] - c1[1]) * frac,
+        c1[2] + (c2[2] - c1[2]) * frac,
+        c1[3] + (c2[3] - c1[3]) * frac
+    ];
+}
+
+function updateColorMap() {
+    if (!globalData || !points) return;
+
+    const mapName = document.getElementById('colorMap').value.toLowerCase();
+    const colorBy = document.getElementById('colorBy').value;
+    const map = COLOR_MAPS[mapName] || COLOR_MAPS['viridis'];
+
+    // Choose Data Source
+    let dataArray = globalData.mass;
+    let label = "Mass";
+
+    console.log("UpdateColorMap Request:", colorBy);
+
+    if (colorBy === 'radius') {
+        if (globalData.radius && globalData.radius.length > 0) {
+            dataArray = globalData.radius;
+            label = "Radius";
+            console.log("Switched to Radius. Range:", Math.min(...dataArray), Math.max(...dataArray));
+        } else {
+            // Fallback if no radius
+            alert("No radius data available in this dataset. Reverting to Mass.");
+            document.getElementById('colorBy').value = 'mass';
+            dataArray = globalData.mass;
+        }
+    }
+
+    // Recalculate Min/Max
+    let minVal = Infinity;
+    let maxVal = -Infinity;
+
+    if (dataArray && dataArray.length > 0) {
+        for (let i = 0; i < dataArray.length; i++) {
+            if (dataArray[i] < minVal) minVal = dataArray[i];
+            if (dataArray[i] > maxVal) maxVal = dataArray[i];
+        }
+    } else {
+        minVal = 0; maxVal = 1;
+    }
+
+    const range = maxVal - minVal || 1;
+    const colors = new Float32Array(dataArray.length * 3);
+    const useLog = (maxVal / (minVal || 1)) > 100; // Auto-detect log scale
+
+    const minLog = Math.log10(minVal || 1e-10);
+    const rangeLog = Math.log10(maxVal) - minLog || 1;
+
+    for (let i = 0; i < dataArray.length; i++) {
+        let t = 0;
+        let val = dataArray[i];
+
+        if (useLog) {
+            t = (Math.log10(val) - minLog) / rangeLog;
+        } else {
+            t = (val - minVal) / range;
+        }
+
+        const rgb = lerpColor(map, t);
+
+        colors[i * 3] = rgb[0];
+        colors[i * 3 + 1] = rgb[1];
+        colors[i * 3 + 2] = rgb[2];
+    }
+
+    points.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    points.geometry.attributes.color.needsUpdate = true;
+
+    showNotification(`Coloring by ${label} (${mapName.charAt(0).toUpperCase() + mapName.slice(1)})`);
 }
 
 function applyFilters() {
@@ -551,4 +909,38 @@ function applyFilters() {
         });
 }
 
+async function handleDemoLoad() {
+    document.getElementById('loadingOverlay').style.display = 'flex';
+    try {
+        const res = await fetch(`${API_BASE_URL}/demo`, { method: 'POST' });
+        if (!res.ok) throw new Error("Failed to load demo data");
+        const data = await res.json();
 
+        currentFileId = data.file_id;
+        document.getElementById('fileName').textContent = data.filename;
+
+        // Scan schema
+        const scanRes = await fetch(`${API_BASE_URL}/scan/${currentFileId}`, { method: 'POST' });
+        if (!scanRes.ok) throw new Error('Scan failed');
+        const scanData = await scanRes.json();
+
+        // Show modal (Schema Scanner is now smart, so defaults should be perfect)
+        showSchemaModal(scanData.datasets, scanData.schema);
+
+        // Hide overlay? No, showSchemaModal keeps it or we wait for user.
+        // Usually showSchemaModal doesn't hide overlay.
+        document.getElementById('loadingOverlay').style.display = 'none';
+
+    } catch (e) {
+        console.error(e);
+        alert('Demo Load Error: ' + e.message);
+        document.getElementById('loadingOverlay').style.display = 'none';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const demoBtn = document.getElementById('loadDemoBtn');
+    if (demoBtn) {
+        demoBtn.addEventListener('click', handleDemoLoad);
+    }
+});

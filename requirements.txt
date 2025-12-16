@@ -6,3 +6,4 @@ numpy
 python-multipart
 scipy
 jinja2
+google-cloud-storage

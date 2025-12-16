@@ -1,0 +1,20 @@
+{
+    "hosting": {
+        "public": "app/templates",
+        "ignore": [
+            "firebase.json",
+            "**/.*",
+            "**/node_modules/**"
+        ],
+        "rewrites": [
+            {
+                "source": "**",
+                "run": {
+                    "serviceId": "halo-viz-backend",
+                    "region": "us-central1"
+                }
+            }
+        ],
+        "cleanUrls": true
+    }
+}
