@@ -1,9 +1,12 @@
 let scene, camera, renderer, points, controls;
 let currentFileId = null;
-let raycaster, mouse;
-let connectionLines;
+let gridHelper = null;
+let currentCoordSystem = 'cartesian';
 let globalData = null;
 let idMap = {};
+let selectedHaloId = null; // Track selected halo for reactive updates
+let raycaster, mouse;
+let connectionLines;
 
 document.addEventListener('DOMContentLoaded', init);
 
@@ -13,10 +16,19 @@ function init() {
     scene = new THREE.Scene();
     scene.background = new THREE.Color(0x000000);
 
-    camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 10000);
+    // Use a massive far plane initially to prevent clipping of astronomical usage
+    camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1e27);
     camera.position.z = 100;
 
     renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+
+    console.log("Init Viewer3D", {
+        width: container.clientWidth,
+        height: container.clientHeight,
+        offsetWidth: container.offsetWidth,
+        offsetHeight: container.offsetHeight
+    });
+
     renderer.setSize(container.clientWidth, container.clientHeight);
     renderer.setPixelRatio(window.devicePixelRatio);
     container.appendChild(renderer.domElement);
@@ -51,6 +63,9 @@ function init() {
     document.getElementById('pointSize').addEventListener('input', updatePointSize);
     document.getElementById('opacity').addEventListener('input', updateOpacity);
     document.getElementById('applyFilter').addEventListener('click', applyFilters);
+    document.getElementById('coordSystem').addEventListener('change', updateCoordinateSystem);
+
+    updateCoordinateSystem(); // Initialize grid
 
     // Tab Switching
     const tabBtns = document.querySelectorAll('.tab-btn');
@@ -87,8 +102,6 @@ function init() {
 
     animate();
 }
-
-// ... (onMouseMove, onWindowResize, animate, handleFileUpload, showSchemaModal, loadDataAndStats, renderData remain unchanged) ...
 
 async function loadHierarchy(fileId, rootId = null, container = null) {
     if (!container) {
@@ -130,8 +143,16 @@ async function loadHierarchy(fileId, rootId = null, container = null) {
             label.className = 'tree-label';
             label.textContent = `Halo ${node.id} (M: ${node.mass.toExponential(1)})`;
 
+            const coords = document.createElement('span');
+            coords.className = 'halo-coords';
+            // Initial coordinate calculation - Always visible
+            if (node.x !== undefined) {
+                coords.textContent = ` (${formatCoordinates(node.x, node.y, node.z, currentCoordSystem)})`;
+            }
+
             content.appendChild(toggle);
             content.appendChild(label);
+            content.appendChild(coords);
             nodeEl.appendChild(content);
 
             const childrenContainer = document.createElement('div');
@@ -195,6 +216,9 @@ function highlightHalo(id, relatedIds = []) {
         }
     });
 
+    // Update Display (Overlay + Tree Text)
+    updateHaloDisplay(id);
+
     // Trigger 3D connection view
     if (idMap && idMap.hasOwnProperty(id)) {
         showConnections(idMap[id]);
@@ -235,17 +259,106 @@ function onMouseClick(event) {
             }
 
             console.log("Clicked Halo ID:", id, "Related:", relatedIds);
+            // Store selected ID
+            selectedHaloId = id;
             highlightHalo(id, relatedIds);
         } else {
             // Clicked on empty space
             clearConnections();
+
+            // Clear selection state
+            selectedHaloId = null;
+
             // Also clear tree selection
             document.querySelectorAll('.tree-content').forEach(el => {
                 el.style.background = '';
                 el.style.border = '';
             });
+            document.getElementById('haloInfoOverlay').style.display = 'none';
         }
     }
+}
+
+function updateCoordinateSystem() {
+    currentCoordSystem = document.getElementById('coordSystem').value;
+
+    // Update Grid
+    if (gridHelper) scene.remove(gridHelper);
+
+    // Choose size based on current data or default
+    const size = 100;
+    const divisions = 20;
+    const color = 0x888888;
+
+    if (currentCoordSystem === 'cartesian') {
+        gridHelper = new THREE.GridHelper(size, divisions, color, 0x444444);
+    } else if (currentCoordSystem === 'cylindrical') {
+        gridHelper = new THREE.PolarGridHelper(size / 2, 16, 8, 64, color, color);
+    } else if (currentCoordSystem === 'spherical') {
+        // Simple approximation: multiple polar grids or a wireframe sphere
+        gridHelper = new THREE.Group();
+        const g1 = new THREE.PolarGridHelper(size / 2, 16, 8, 64, color, color);
+        const g2 = new THREE.PolarGridHelper(size / 2, 16, 8, 64, color, color);
+        g2.rotation.x = Math.PI / 2;
+        gridHelper.add(g1);
+        gridHelper.add(g2);
+    }
+
+    scene.add(gridHelper);
+
+    // Reactive Update: Update ALL visible hierarchy nodes
+    const treeNodes = document.querySelectorAll('.tree-node');
+    treeNodes.forEach(node => {
+        const id = parseInt(node.dataset.id);
+        const idx = idMap[id];
+        if (idx !== undefined && globalData) {
+            const x = globalData.x[idx];
+            const y = globalData.y[idx];
+            const z = globalData.z[idx];
+            const text = formatCoordinates(x, y, z, currentCoordSystem);
+
+            const coordSpan = node.querySelector('.halo-coords');
+            if (coordSpan) {
+                coordSpan.textContent = ` (${text})`;
+            }
+        }
+    });
+
+    // Also update overlay if something is selected
+    if (selectedHaloId !== null) {
+        updateHaloDisplay(selectedHaloId);
+    }
+}
+
+function updateHaloDisplay(id) {
+    const idx = idMap[id];
+    if (globalData && idx !== undefined) {
+        const x = globalData.x[idx];
+        const y = globalData.y[idx];
+        const z = globalData.z[idx];
+        const text = formatCoordinates(x, y, z, currentCoordSystem);
+
+        // Update Overlay
+        const overlay = document.getElementById('haloInfoOverlay');
+        overlay.style.display = 'block';
+        overlay.innerHTML = `<strong>Halo ${id}</strong><br>${text}`;
+    }
+}
+
+function formatCoordinates(x, y, z, system) {
+    if (system === 'cartesian') {
+        return `X: ${x.toFixed(2)}, Y: ${y.toFixed(2)}, Z: ${z.toFixed(2)}`;
+    } else if (system === 'cylindrical') {
+        const rho = Math.sqrt(x * x + y * y);
+        const phi = Math.atan2(y, x);
+        return `ρ: ${rho.toFixed(2)}, φ: ${phi.toFixed(2)} rad, Z: ${z.toFixed(2)}`;
+    } else if (system === 'spherical') {
+        const r = Math.sqrt(x * x + y * y + z * z);
+        const theta = Math.acos(z / r);
+        const phi = Math.atan2(y, x);
+        return `r: ${r.toFixed(2)}, θ: ${theta.toFixed(2)}, φ: ${phi.toFixed(2)}`;
+    }
+    return '';
 }
 
 function showConnections(index) {
@@ -266,8 +379,7 @@ function showConnections(index) {
         positions.push(globalData.x[pIdx], globalData.y[pIdx], globalData.z[pIdx]);
     }
 
-    // 2. Connection to Children (Scan all particles - optimization needed for large N)
-    // For < 100k particles, a simple loop is "okay" for a click event (not animation loop)
+    // 2. Connection to Children
     if (globalData.parent_id) {
         for (let i = 0; i < globalData.parent_id.length; i++) {
             if (globalData.parent_id[i] === currentId) {
@@ -279,7 +391,7 @@ function showConnections(index) {
 
     if (positions.length > 0) {
         connectionLines.geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
-        connectionLines.geometry.computeBoundingSphere(); // Update bounding sphere for culling
+        connectionLines.geometry.computeBoundingSphere();
         connectionLines.visible = true;
     } else {
         connectionLines.visible = false;
@@ -299,7 +411,7 @@ function onWindowResize() {
 
 function animate() {
     requestAnimationFrame(animate);
-    controls.update(); // Required for damping
+    controls.update();
     renderer.render(scene, camera);
 }
 
@@ -314,7 +426,6 @@ async function handleFileUpload(event) {
     formData.append('file', file);
 
     try {
-        // Upload
         const uploadRes = await fetch(`${API_BASE_URL}/upload`, { method: 'POST', body: formData });
         if (!uploadRes.ok) throw new Error('Upload failed');
         const uploadData = await uploadRes.json();
@@ -419,7 +530,7 @@ async function loadDataAndStats(fileId, params = '') {
     try {
         const [dataRes, statsRes] = await Promise.all([
             fetch(`${API_BASE_URL}/data/${fileId}?${params}`),
-            fetch(`${API_BASE_URL}/stats/${fileId}`) // Note: Stats are currently for the full file
+            fetch(`${API_BASE_URL}/stats/${fileId}`)
         ]);
 
         if (!dataRes.ok || !statsRes.ok) throw new Error('Failed to fetch data');
@@ -430,17 +541,12 @@ async function loadDataAndStats(fileId, params = '') {
         renderData(data);
         globalData = data; // Store for raycasting lookup
 
-        // If we have filters, we might want to update stats to reflect subset
-        // For now, we update the UI with the full stats or calculate subset stats if needed
         if (params) {
             const subsetStats = {
                 total_particles: data.mass.length,
                 total_mass: data.mass.reduce((a, b) => a + b, 0),
-                // Pass through other stats or leave them as full file stats
-                // Ideally backend should handle filtered stats
                 ...stats
             };
-            // Override counts
             subsetStats.total_particles = data.mass.length;
             if (window.updateCharts) {
                 window.updateCharts(subsetStats, data);
@@ -473,12 +579,25 @@ function renderData(data) {
     const colors = [];
 
     const colorScale = new THREE.Color();
-    const minMass = Math.min(...data.mass);
-    const maxMass = Math.max(...data.mass);
+    // Safe Min/Max calculation for large arrays to avoid stack overflow
+    let minMass = Infinity;
+    let maxMass = -Infinity;
+    if (data.mass && data.mass.length > 0) {
+        for (let i = 0; i < data.mass.length; i++) {
+            if (data.mass[i] < minMass) minMass = data.mass[i];
+            if (data.mass[i] > maxMass) maxMass = data.mass[i];
+        }
+    } else {
+        minMass = 0;
+        maxMass = 1;
+    }
     const massRange = maxMass - minMass || 1;
 
+    console.log(`RenderData: Processing ${data.x.length} points. Mass Range: ${minMass} - ${maxMass}`);
+
     for (let i = 0; i < data.x.length; i++) {
-        vertices.push(data.x[i], data.y[i], data.z[i]);
+        // Explicitly cast to Number to avoid string/type issues
+        vertices.push(Number(data.x[i]), Number(data.y[i]), Number(data.z[i]));
 
         // Color by mass (heatmap: blue -> red)
         const normalizedMass = (data.mass[i] - minMass) / massRange;
@@ -489,7 +608,27 @@ function renderData(data) {
     geometry.setAttribute('position', new THREE.Float32BufferAttribute(vertices, 3));
     geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
 
-    const sprite = new THREE.TextureLoader().load('https://threejs.org/examples/textures/sprites/disc.png');
+    // Generate a simple circular sprite to avoid external dependencies/CORS issues
+    const getSprite = () => {
+        const canvas = document.createElement('canvas');
+        canvas.width = 32;
+        canvas.height = 32;
+        const context = canvas.getContext('2d');
+        context.shadowBlur = 0;
+        context.shadowColor = 'none';
+
+        const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
+        gradient.addColorStop(0, 'rgba(255,255,255,1)');
+        gradient.addColorStop(0.2, 'rgba(255,255,255,0.8)');
+        gradient.addColorStop(0.5, 'rgba(255,255,255,0.2)');
+        gradient.addColorStop(1, 'rgba(0,0,0,0)');
+
+        context.fillStyle = gradient;
+        context.fillRect(0, 0, 32, 32);
+
+        const text = new THREE.CanvasTexture(canvas);
+        return text;
+    };
 
     const material = new THREE.PointsMaterial({
         size: parseFloat(document.getElementById('pointSize').value),
@@ -497,24 +636,50 @@ function renderData(data) {
         transparent: true,
         opacity: parseFloat(document.getElementById('opacity').value),
         sizeAttenuation: true,
-        map: sprite,
-        alphaTest: 0.5
+        map: getSprite(),
+        depthWrite: false, // Fix transparency overlapping issue
+        blending: THREE.AdditiveBlending // Better for space particles
     });
 
     points = new THREE.Points(geometry, material);
+    // Disable frustrating culling issues if bounding sphere is wonky
+    points.frustumCulled = false;
     scene.add(points);
 
-    // Center camera
+    // Center camera and adjust frustum to fit data
     geometry.computeBoundingSphere();
     const center = geometry.boundingSphere.center;
-    const radius = geometry.boundingSphere.radius;
+    const radius = geometry.boundingSphere.radius || 100; // Default if 0
 
-    controls.target.copy(center);
-    controls.update();
+    console.log("RenderData Layout:", { center, radius });
 
-    camera.position.copy(center);
-    camera.position.z += radius * 2;
-    camera.lookAt(center);
+    if (!isNaN(center.x)) {
+        controls.target.copy(center);
+
+        // Robust Camera Fitting
+        const fov = camera.fov * (Math.PI / 180);
+        let distance = Math.abs(radius / Math.sin(fov / 2));
+        distance *= 1.5; // Add some padding
+
+        // Dynamically adjust planes to prevent clipping z-fighting
+        camera.near = radius / 100000;
+        camera.far = radius * 100;
+        if (camera.near < 0.001) camera.near = 0.001;
+
+        camera.updateProjectionMatrix();
+
+        camera.position.copy(center);
+        camera.position.z += distance;
+        camera.lookAt(center);
+
+        controls.update();
+
+        // Auto-scale point size if it seems too small/large compared to scene
+        // Just a heuristic trigger if user hasn't messed with it
+        const optimalSize = radius / 1000;
+        // Don't override user input aggressively, but maybe log it or set if default
+        console.log("Optimal point size approx:", optimalSize);
+    }
 }
 
 function updatePointSize(e) {
@@ -550,5 +715,3 @@ function applyFilters() {
             document.getElementById('loadingOverlay').style.display = 'none';
         });
 }
-
-
