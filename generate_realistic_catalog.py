@@ -1,112 +1,107 @@
 import h5py
 import numpy as np
 
-def generate_nfw_positions(n_particles, r_vir, c=10.0, center=np.array([0,0,0])):
+def generate_group_satellites(host_pos, r_vir, n_sats):
     """
-    Generate random positions following an NFW density profile.
-    r_vir: Virial Radius
-    c: Concentration parameter
+    Generates a sparse cloud of satellites around a host.
+    Wide orbit for line visibility.
     """
     pos = []
-    # Rejection sampling max density proxy
-    max_rho = 1.0 / ( (1.0/c) * (1 + 1.0/c)**2 )
+    # Place satellites in a shell between 0.3 R_vir and 1.0 R_vir
+    # This guarantees lines are visible and don't overlap the host.
+    min_dist = 0.3 * r_vir
     
-    count = 0
-    while count < n_particles:
-        r = np.random.random() * r_vir
-        x = r / (r_vir / c)
-        rho = 1.0 / (x * (1+x)**2)
+    for _ in range(n_sats):
+        # Random spherical direction
+        theta = np.random.uniform(0, 2*np.pi)
+        phi = np.random.uniform(0, np.pi)
         
-        if np.random.random() < (rho / max_rho):
-            theta = np.random.uniform(0, 2*np.pi)
-            phi = np.random.uniform(0, np.pi)
-            
-            px = r * np.sin(phi) * np.cos(theta)
-            py = r * np.sin(phi) * np.sin(theta)
-            pz = r * np.cos(phi)
-            
-            pos.append(np.array([px, py, pz]) + center)
-            count += 1
-            
+        # Uniform distribution in Radius (not NFW) for maximum clarity
+        r = np.random.uniform(min_dist, r_vir)
+        
+        px = r * np.sin(phi) * np.cos(theta)
+        py = r * np.sin(phi) * np.sin(theta)
+        pz = r * np.cos(phi)
+        
+        pos.append(np.array([px, py, pz]) + host_pos)
+        
     return np.array(pos)
 
 def generate_catalog(filename="demo_halo_catalog.h5"):
-    print("Generating realistic halo catalog...")
+    print("Generating 'String of Pearls' Filament Demo...")
     
-    # Constants
-    # Box Size: 100 Mpc
-    BOX_SIZE = 100.0 
-    CENTER = np.array([50.0, 50.0, 50.0])
+    # Storage
+    all_mass = []
+    all_radius = []
+    all_pos = []
+    all_parents = []
+    ids = []
     
-    # 1. Main Host Halo (Cluster)
-    # Mass: 1e15 M_sun
-    # Radius: ~2.5 Mpc
-    host_mass = 1e15
-    host_radius = 2.5
+    current_id = 1
     
-    # 2. Subhalos (Satellites)
-    # 500 Subhalos orbiting the host
-    # Mass: 1e10 - 1e12 M_sun
-    n_subs = 500
-    sub_masses = 10**(np.random.uniform(10, 12, n_subs))
-    sub_radii = (sub_masses / 1e15)**(1/3) * host_radius * 10 # Scaling approx
+    # --- The Filament Backbone ---
+    # A sine wave across the box
+    # z = 50, y = 50 + 20*sin(x), x = 10..90
+    n_groups = 25
+    x_coords = np.linspace(10, 90, n_groups)
     
-    # Positions: Distributed within Host R_vir (NFW-like distribution for satellites too)
-    sub_positions = generate_nfw_positions(n_subs, r_vir=host_radius, c=3.0, center=CENTER)
+    for x in x_coords:
+        # 1. Create the Host Group
+        y = 50 + 20 * np.sin((x / 100.0) * 2 * np.pi) # Curve
+        z = 50 + np.random.uniform(-5, 5) # Slight depth scatter
+        
+        host_pos = np.array([x, y, z])
+        host_mass = 10**(np.random.uniform(13.0, 14.5)) # Group/Cluster mass
+        host_rvir = (host_mass / 1e15)**(1/3) * 8.0 * 2.5 # Exaggerated radius for UI
+        
+        # Add Host
+        all_mass.append(host_mass)
+        all_radius.append(host_rvir)
+        all_pos.append(host_pos)
+        all_parents.append(-1)
+        ids.append(current_id)
+        
+        host_id = current_id
+        current_id += 1
+        
+        # 2. Add Satellites (15 to 30 per group)
+        n_sats = np.random.randint(15, 31)
+        sats_pos = generate_group_satellites(host_pos, host_rvir, n_sats)
+        
+        sats_mass = 10**(np.random.uniform(11.0, 12.0, n_sats))
+        sats_rad = (sats_mass / 1e15)**(1/3) * 5.0 # Visible dots
+        
+        all_mass.extend(sats_mass)
+        all_radius.extend(sats_rad)
+        all_pos.extend(sats_pos)
+        all_parents.extend([host_id] * n_sats)
+        ids.extend(range(current_id, current_id + n_sats))
+        current_id += n_sats
+        
+    # --- Background Noise (Field Halos) ---
+    # Sparse background to provide context
+    n_field = 500
+    field_pos = np.random.rand(n_field, 3) * 100.0
+    field_mass = 10**(np.random.uniform(10, 12, n_field))
+    field_rad = (field_mass / 1e15)**(1/3) * 5.0
     
-    # 3. Field Halos
-    # 2000 halos scattered in the box
-    n_field = 2000
-    field_masses = 10**(np.random.uniform(9, 13, n_field))
-    field_radii = (field_masses / 1e15)**(1/3) * host_radius * 10
-    field_positions = np.random.rand(n_field, 3) * BOX_SIZE
+    all_mass.extend(field_mass)
+    all_radius.extend(field_rad)
+    all_pos.extend(field_pos)
+    all_parents.extend([-1] * n_field)
+    ids.extend(range(current_id, current_id + n_field))
     
-    # --- Assembly ---
-    
-    # IDs: START AT 1 to avoid Javascript "ID 0 is False" bug
-    # Host: ID 1
-    # Subs: ID 2..501
-    # Field: ID 502..2501
-    
-    # Host is represented as a single massive particle for simplicity in this catalog view
-    # (Or use the center point)
-    all_mass = np.concatenate([[host_mass], sub_masses, field_masses])
-    all_radius = np.concatenate([[host_radius], sub_radii, field_radii])
-    all_pos = np.vstack([CENTER, sub_positions, field_positions])
-    
-    all_ids = np.arange(1, len(all_mass) + 1)
-    
-    # Parents logic:
-    # Host (ID 1): Parent -1 (Root)
-    # Subs (ID 2..501): Parent 1 (The Host)
-    # Field: Parent -1 (Roots)
-    all_parents = np.full(len(all_mass), -1, dtype=np.int32)
-    
-    # Set parents for subhalos (Indices 1 to 500 -> Parent is ID 1)
-    # Note: Parent ID is 1.
-    all_parents[1:n_subs+1] = 1 
-    
-    # Save to H5
+    # Save
     with h5py.File(filename, 'w') as f:
         grp = f.create_group("Catalog")
-        
-        # Using standard names to ensure Scanner compatibility
-        grp.create_dataset("Mass", data=all_mass)
-        grp.create_dataset("Radius", data=all_radius)
-        grp.create_dataset("Position", data=all_pos)
-        grp.create_dataset("ParticleIDs", data=all_ids)
-        grp.create_dataset("ParentID", data=all_parents)
-        
-        # Add Units Attribute
+        grp.create_dataset("Mass", data=np.array(all_mass))
+        grp.create_dataset("Radius", data=np.array(all_radius))
+        grp.create_dataset("Position", data=np.array(all_pos))
+        grp.create_dataset("ParticleIDs", data=np.array(ids))
+        grp.create_dataset("ParentID", data=np.array(all_parents))
         grp['Mass'].attrs['units'] = 'M_sun'
-        grp['Radius'].attrs['units'] = 'Mpc'
-        grp['Position'].attrs['units'] = 'Mpc'
         
-    print(f"Drafted {filename} with:")
-    print(f" - 1 Host Cluster (ID 1, M={host_mass:.1e})")
-    print(f" - {n_subs} Satellites (Child of ID 1)")
-    print(f" - {n_field} Field Halos")
-    print("IDs start at 1 to prevent JS null/false ambiguity.")
+    print(f"Drafted {filename}: {n_groups} Groups with ~{20} subs each.")
 
 if __name__ == "__main__":
     generate_catalog()

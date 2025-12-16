@@ -908,3 +908,39 @@ function applyFilters() {
             document.getElementById('loadingOverlay').style.display = 'none';
         });
 }
+
+async function handleDemoLoad() {
+    document.getElementById('loadingOverlay').style.display = 'flex';
+    try {
+        const res = await fetch(`${API_BASE_URL}/demo`, { method: 'POST' });
+        if (!res.ok) throw new Error("Failed to load demo data");
+        const data = await res.json();
+
+        currentFileId = data.file_id;
+        document.getElementById('fileName').textContent = data.filename;
+
+        // Scan schema
+        const scanRes = await fetch(`${API_BASE_URL}/scan/${currentFileId}`, { method: 'POST' });
+        if (!scanRes.ok) throw new Error('Scan failed');
+        const scanData = await scanRes.json();
+
+        // Show modal (Schema Scanner is now smart, so defaults should be perfect)
+        showSchemaModal(scanData.datasets, scanData.schema);
+
+        // Hide overlay? No, showSchemaModal keeps it or we wait for user.
+        // Usually showSchemaModal doesn't hide overlay.
+        document.getElementById('loadingOverlay').style.display = 'none';
+
+    } catch (e) {
+        console.error(e);
+        alert('Demo Load Error: ' + e.message);
+        document.getElementById('loadingOverlay').style.display = 'none';
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    const demoBtn = document.getElementById('loadDemoBtn');
+    if (demoBtn) {
+        demoBtn.addEventListener('click', handleDemoLoad);
+    }
+});

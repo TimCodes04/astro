@@ -44,6 +44,10 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 async def read_root(request: Request):
     return templates.TemplateResponse("index.html", {"request": request})
 
+@app.get("/info", response_class=HTMLResponse)
+async def read_info(request: Request):
+    return templates.TemplateResponse("info.html", {"request": request})
+
 @app.post("/upload")
 async def upload_file(file: UploadFile = File(...)):
     if not file.filename.endswith(('.hdf5', '.h5', '.csv')):
@@ -60,6 +64,29 @@ async def upload_file(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail=f"Could not save file: {str(e)}")
         
     return {"filename": file.filename, "file_id": file_id}
+
+@app.post("/demo")
+async def load_demo_data():
+    """
+    Generates (if needed) and loads the demo dataset.
+    Simulates an upload process.
+    """
+    demo_filename = "demo_halo_catalog.h5"
+    if not os.path.exists(demo_filename):
+        # Generate it on demand
+        import subprocess
+        subprocess.run(["python3", "generate_realistic_catalog.py"], check=True)
+        
+    if not os.path.exists(demo_filename):
+        raise HTTPException(status_code=500, detail="Failed to generate demo data")
+        
+    # Simulate Upload
+    file_id = str(uuid.uuid4())
+    destination = os.path.join(UPLOAD_DIR, f"{file_id}.h5")
+    
+    shutil.copy(demo_filename, destination)
+    
+    return {"filename": "Demo Data (NFW Cluster)", "file_id": file_id}
 
 from app.utils.analysis import calculate_stats, filter_data
 from typing import Optional
