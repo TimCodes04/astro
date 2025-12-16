@@ -3,6 +3,7 @@ let currentFileId = null;
 let gridHelper = null;
 let currentCoordSystem = 'cartesian';
 let globalData = null;
+let dataCenter = new THREE.Vector3(0, 0, 0);
 let idMap = {};
 let selectedHaloId = null; // Track selected halo for reactive updates
 let raycaster, mouse;
@@ -63,7 +64,9 @@ function init() {
     document.getElementById('pointSize').addEventListener('input', updatePointSize);
     document.getElementById('opacity').addEventListener('input', updateOpacity);
     document.getElementById('applyFilter').addEventListener('click', applyFilters);
+    document.getElementById('applyFilter').addEventListener('click', applyFilters);
     document.getElementById('coordSystem').addEventListener('change', updateCoordinateSystem);
+    document.getElementById('centerGrid').addEventListener('change', updateCoordinateSystem);
 
     updateCoordinateSystem(); // Initialize grid
 
@@ -304,6 +307,16 @@ function updateCoordinateSystem() {
         gridHelper.add(g2);
     }
 
+    const useRelative = document.getElementById('centerGrid').checked;
+
+    if (useRelative) {
+        gridHelper.position.copy(dataCenter);
+        showNotification("Switched to Relative Coordinates (Centered)");
+    } else {
+        gridHelper.position.set(0, 0, 0);
+        showNotification("Switched to Absolute Coordinates (World Origin)");
+    }
+
     scene.add(gridHelper);
 
     // Reactive Update: Update ALL visible hierarchy nodes
@@ -312,9 +325,16 @@ function updateCoordinateSystem() {
         const id = parseInt(node.dataset.id);
         const idx = idMap[id];
         if (idx !== undefined && globalData) {
-            const x = globalData.x[idx];
-            const y = globalData.y[idx];
-            const z = globalData.z[idx];
+            let x = globalData.x[idx];
+            let y = globalData.y[idx];
+            let z = globalData.z[idx];
+
+            if (useRelative) {
+                x -= dataCenter.x;
+                y -= dataCenter.y;
+                z -= dataCenter.z;
+            }
+
             const text = formatCoordinates(x, y, z, currentCoordSystem);
 
             const coordSpan = node.querySelector('.halo-coords');
@@ -330,12 +350,47 @@ function updateCoordinateSystem() {
     }
 }
 
+function showNotification(message) {
+    const overlay = document.getElementById('haloInfoOverlay');
+    const originalDisplay = overlay.style.display;
+    const originalContent = overlay.innerHTML;
+
+    // Use a separate notification element or hijack the overlay temporarily
+    // Ideally we'd have a toast, but keeping it simple:
+    const notification = document.createElement('div');
+    notification.style.position = 'absolute';
+    notification.style.top = '60px';
+    notification.style.right = '10px';
+    notification.style.background = 'rgba(33, 150, 243, 0.9)';
+    notification.style.color = 'white';
+    notification.style.padding = '10px 20px';
+    notification.style.borderRadius = '4px';
+    notification.style.fontFamily = 'sans-serif';
+    notification.style.transition = 'opacity 0.5s';
+    notification.textContent = message;
+
+    document.getElementById('viewer3d').appendChild(notification);
+
+    setTimeout(() => {
+        notification.style.opacity = '0';
+        setTimeout(() => notification.remove(), 500);
+    }, 2000);
+}
+
 function updateHaloDisplay(id) {
     const idx = idMap[id];
     if (globalData && idx !== undefined) {
-        const x = globalData.x[idx];
-        const y = globalData.y[idx];
-        const z = globalData.z[idx];
+        let x = globalData.x[idx];
+        let y = globalData.y[idx];
+        let z = globalData.z[idx];
+
+        // Check relative mode
+        if (document.getElementById('centerGrid').checked) {
+            x -= dataCenter.x;
+            y -= dataCenter.y;
+            z -= dataCenter.z;
+        }
+
         const text = formatCoordinates(x, y, z, currentCoordSystem);
 
         // Update Overlay
@@ -649,6 +704,7 @@ function renderData(data) {
     // Center camera and adjust frustum to fit data
     geometry.computeBoundingSphere();
     const center = geometry.boundingSphere.center;
+    dataCenter.copy(center); // Store for grid centering
     const radius = geometry.boundingSphere.radius || 100; // Default if 0
 
     console.log("RenderData Layout:", { center, radius });
