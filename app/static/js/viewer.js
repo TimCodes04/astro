@@ -67,6 +67,8 @@ function init() {
     document.getElementById('applyFilter').addEventListener('click', applyFilters);
     document.getElementById('coordSystem').addEventListener('change', updateCoordinateSystem);
     document.getElementById('centerGrid').addEventListener('change', updateCoordinateSystem);
+    document.getElementById('colorMap').addEventListener('change', updateColorMap);
+    document.getElementById('colorBy').addEventListener('change', updateColorMap);
 
     updateCoordinateSystem(); // Initialize grid
 
@@ -595,6 +597,12 @@ async function loadDataAndStats(fileId, params = '') {
 
         renderData(data);
         globalData = data; // Store for raycasting lookup
+        console.log("Global Data Loaded:", {
+            hasMass: !!globalData.mass,
+            massLen: globalData.mass ? globalData.mass.length : 0,
+            hasRadius: !!globalData.radius,
+            radiusLen: globalData.radius ? globalData.radius.length : 0
+        });
 
         if (params) {
             const subsetStats = {
@@ -738,12 +746,141 @@ function renderData(data) {
     }
 }
 
+
 function updatePointSize(e) {
     if (points) points.material.size = parseFloat(e.target.value);
 }
 
 function updateOpacity(e) {
     if (points) points.material.opacity = parseFloat(e.target.value);
+}
+
+// --- Color Mapping Logic ---
+const COLOR_MAPS = {
+    viridis: [
+        [0.0, 0.267, 0.005, 0.329],
+        [0.2, 0.282, 0.224, 0.490],
+        [0.4, 0.208, 0.392, 0.529],
+        [0.6, 0.129, 0.533, 0.553],
+        [0.8, 0.255, 0.714, 0.459],
+        [1.0, 0.992, 0.906, 0.145]
+    ],
+    plasma: [
+        [0.0, 0.051, 0.027, 0.529],
+        [0.2, 0.325, 0.008, 0.584],
+        [0.4, 0.569, 0.157, 0.498],
+        [0.6, 0.812, 0.380, 0.306],
+        [0.8, 0.949, 0.647, 0.149],
+        [1.0, 0.941, 0.976, 0.129]
+    ],
+    inferno: [
+        [0.0, 0.001, 0.003, 0.024],
+        [0.2, 0.173, 0.043, 0.259],
+        [0.4, 0.431, 0.118, 0.345],
+        [0.6, 0.749, 0.349, 0.169],
+        [0.8, 0.933, 0.659, 0.192],
+        [1.0, 0.988, 0.992, 0.647]
+    ],
+    magma: [
+        [0.0, 0.001, 0.001, 0.020],
+        [0.2, 0.137, 0.063, 0.298],
+        [0.4, 0.369, 0.067, 0.400],
+        [0.6, 0.706, 0.176, 0.325],
+        [0.8, 0.984, 0.494, 0.435],
+        [1.0, 0.988, 0.992, 0.749]
+    ]
+};
+
+function lerpColor(map, t) {
+    if (t < 0) t = 0;
+    if (t > 1) t = 1;
+
+    // Find segment
+    // Map has 6 points (0, 0.2, 0.4 ... 1.0)
+    // Segment width is 0.2
+    let seg = t * (map.length - 1);
+    let idx = Math.floor(seg);
+    let frac = seg - idx;
+
+    if (idx >= map.length - 1) return map[map.length - 1].slice(1);
+
+    const c1 = map[idx];
+    const c2 = map[idx + 1];
+
+    return [
+        c1[1] + (c2[1] - c1[1]) * frac,
+        c1[2] + (c2[2] - c1[2]) * frac,
+        c1[3] + (c2[3] - c1[3]) * frac
+    ];
+}
+
+function updateColorMap() {
+    if (!globalData || !points) return;
+
+    const mapName = document.getElementById('colorMap').value.toLowerCase();
+    const colorBy = document.getElementById('colorBy').value;
+    const map = COLOR_MAPS[mapName] || COLOR_MAPS['viridis'];
+
+    // Choose Data Source
+    let dataArray = globalData.mass;
+    let label = "Mass";
+
+    console.log("UpdateColorMap Request:", colorBy);
+
+    if (colorBy === 'radius') {
+        if (globalData.radius && globalData.radius.length > 0) {
+            dataArray = globalData.radius;
+            label = "Radius";
+            console.log("Switched to Radius. Range:", Math.min(...dataArray), Math.max(...dataArray));
+        } else {
+            // Fallback if no radius
+            alert("No radius data available in this dataset. Reverting to Mass.");
+            document.getElementById('colorBy').value = 'mass';
+            dataArray = globalData.mass;
+        }
+    }
+
+    // Recalculate Min/Max
+    let minVal = Infinity;
+    let maxVal = -Infinity;
+
+    if (dataArray && dataArray.length > 0) {
+        for (let i = 0; i < dataArray.length; i++) {
+            if (dataArray[i] < minVal) minVal = dataArray[i];
+            if (dataArray[i] > maxVal) maxVal = dataArray[i];
+        }
+    } else {
+        minVal = 0; maxVal = 1;
+    }
+
+    const range = maxVal - minVal || 1;
+    const colors = new Float32Array(dataArray.length * 3);
+    const useLog = (maxVal / (minVal || 1)) > 100; // Auto-detect log scale
+
+    const minLog = Math.log10(minVal || 1e-10);
+    const rangeLog = Math.log10(maxVal) - minLog || 1;
+
+    for (let i = 0; i < dataArray.length; i++) {
+        let t = 0;
+        let val = dataArray[i];
+
+        if (useLog) {
+            t = (Math.log10(val) - minLog) / rangeLog;
+        } else {
+            t = (val - minVal) / range;
+        }
+
+        const rgb = lerpColor(map, t);
+
+        colors[i * 3] = rgb[0];
+        colors[i * 3 + 1] = rgb[1];
+        colors[i * 3 + 2] = rgb[2];
+    }
+
+    points.geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    points.geometry.attributes.color.needsUpdate = true;
+
+    showNotification(`Coloring by ${label} (${mapName.charAt(0).toUpperCase() + mapName.slice(1)})`);
 }
 
 function applyFilters() {
