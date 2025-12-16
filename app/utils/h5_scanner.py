@@ -69,7 +69,49 @@ def detect_schema(datasets):
     # Select best candidates, simple first match for now
     for field in schema.keys():
         if candidates[field]:
-            # Prefer exact matches or shortest path
-            schema[field] = candidates[field][0]['path']
+            # Advanced Scoring System
+            best_cand = None
+            best_score = -999
+            
+            for cand in candidates[field]:
+                score = 0
+                path = cand['path'].lower()
+                basename = path.split('/')[-1]
+                
+                # Base score: length penalty (prefer 'id' over 'particle_ids_long_name')
+                score -= len(basename) * 0.5
+                
+                if field == 'id':
+                    # Critical: Penalize likely parent fields
+                    if 'parent' in path or 'host' in path or 'group' in path: 
+                        score -= 50 
+                    
+                    if basename == 'id': score += 20
+                    elif 'id' in basename: score += 10
+                    elif 'index' in basename: score += 5
+                    
+                elif field == 'parent_id':
+                    if 'parent' in basename: score += 20
+                    elif 'host' in basename: score += 10
+                    elif 'group' in basename: score += 5
+                    
+                elif field == 'mass':
+                    if basename == 'mass': score += 20
+                    elif 'mass' in basename: score += 10
+                    
+                elif field == 'pos':
+                    if 'coord' in basename: score += 15
+                    elif 'pos' in basename: score += 10
+                    
+                elif field == 'radius':
+                    if 'radius' in basename: score += 20
+                    elif 'r200' in basename: score += 15
+                    elif 'vir' in basename: score += 10
+
+                if best_cand is None or score > best_score:
+                    best_score = score
+                    best_cand = cand
+            
+            schema[field] = best_cand['path']
 
     return schema, datasets
