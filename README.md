@@ -13,3 +13,36 @@ This is very much my first big project and it contains a lot of messy, bad code.
 
 Thanks!
 T
+
+## Local Setup
+
+### 1. Prerequisites
+- Python 3.8+
+- nodejs (optional, only if you want to modify frontend dependencies, otherwise raw JS is used)
+
+### 2. Installation
+
+```bash
+# Clone the repository
+git clone <your-repo-url>
+cd astro
+
+# Create virtual environment
+python3 -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -r requirements.txt
+```
+
+### 3. Running the App
+
+Start the FastAPI backend server:
+
+```bash
+uvicorn app.main:app --reload
+```
+
+Then open your browser to: **http://127.0.0.1:8000**
+
+
