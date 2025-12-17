@@ -1,0 +1,19 @@
+# Exclude Virtual Env
+venv/
+__pycache__/
+
+# Exclude Data (Too large for build context)
+*.h5
+*.hdf5
+app/uploads/
+
+# Exclude Git
+.git/
+.gitignore
+
+# Exclude IDE
+.vscode/
+.idea/
+
+# Exclude Artifacts
+.gemini/

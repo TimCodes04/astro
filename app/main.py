@@ -17,11 +17,14 @@ from app.utils.h5_scanner import scan_h5, detect_schema
 app = FastAPI()
 
 # CORS Configuration
-# Allow all origins for now to support Firebase Hosting easily.
-# For production security, restrict this to your specific Firebase domain.
+# Production Security: Set ALLOWED_ORIGINS="https://your-app.web.app" in Cloud Run
+# Default: "*" (Allow all)
+origins_str = os.getenv("ALLOWED_ORIGINS", "*")
+origins = [origin.strip() for origin in origins_str.split(",")]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
