@@ -10,7 +10,7 @@
             {
                 "source": "**",
                 "run": {
-                    "serviceId": "halo-viz-backend",
+                    "serviceId": "astro",
                     "region": "us-central1"
                 }
             }
