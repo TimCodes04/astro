@@ -24,7 +24,7 @@ T
 
 ```bash
 # Clone the repository
-git clone <your-repo-url>
+git clone <https://github.com/TimCodes04/astro>
 cd astro
 
 # Create virtual environment
