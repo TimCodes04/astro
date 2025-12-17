@@ -6,4 +6,7 @@ numpy
 python-multipart
 scipy
 jinja2
+requests
+firebase-admin
+google-cloud-firestore
 google-cloud-storage
