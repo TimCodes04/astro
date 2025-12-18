@@ -1,6 +1,6 @@
 Dear Coders,
 
-This is a somewhat messy repository and I will try to explain some things about the application. I am also working on hosting it and it will be available shortly under halo-tool.com.
+This is a somewhat messy repository but I'm working on cleaning it up a bit. I am also working on hosting it and it will be available shortly under halo-tool.com.
 The app folder contains both frontend and backend elements. Most importantly it contains /utils which is home to the h5_scanner.py which can automatically scan .h5 files and 
 match data to mass, radius etc.. Therefore the app can read all kinds of .h5 files no matter the structure. The file analysis.py is obviously where all the analysis happens.
 Much of this code was either wrote or debugged using AI and I made sure there are a lot of comments to enhance understanding. 
@@ -9,7 +9,7 @@ If you want to run this locally in your browser, you will find all necessary req
 To run, use uvicorn as indicated in requirements.txt.
 I will add more info to this README shortly!
 
-This is very much my first big project and it contains a lot of messy, bad code. So if you just want the end result, visit halo-tool.com (hopefully reachable before 2026 kicks off).
+This is very much my first big project and it contains a lot of messy, bad code. So if you just want the end result, visit halo-tool.com an try it out.
 
 Thanks!
 T
